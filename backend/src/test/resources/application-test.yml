@@ -1,0 +1,7 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:wmstest;MODE=MySQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_DELAY=-1
+wms:
+  auth:
+    secret: test-secret-for-unit-tests
+    admin-password: admin123

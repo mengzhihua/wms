@@ -344,3 +344,17 @@ CREATE TABLE IF NOT EXISTS wms_sow_task (
   created_at TIMESTAMP,
   updated_at TIMESTAMP
 );
+
+-- 系统用户（首次启动无用户时由 UserService 创建 admin）
+CREATE TABLE IF NOT EXISTS wms_user (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(64) NOT NULL,
+  password VARCHAR(255) NOT NULL,
+  real_name VARCHAR(64),
+  role VARCHAR(16) NOT NULL,
+  status INT DEFAULT 1,
+  last_login_at TIMESTAMP,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP,
+  CONSTRAINT uk_user_name UNIQUE (username)
+);

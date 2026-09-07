@@ -13,6 +13,7 @@
 | 出库管理 | 出库单、库存分配（FEFO → FIFO，仅存储/拣货位，支持部分分配）、取消分配、拣货任务确认（含少拣释放）、发运、**波次总拣 + 播种（多单合并拣货、按播种位分拨、波次发运）** |
 | 库内管理 | 库存查询、库存汇总、库存流水、移库、库存调整、冻结 / 解冻、盘点（生成快照 → 录入 → 差异 → 过账） |
 | 工作台 | 库位使用率、库存总量、待办入库 / 上架 / 出库 / 拣货、最近流水、安全库存预警 |
+| 系统管理 | 登录 / 登出 / 修改密码，用户管理（ADMIN 管理员 / OPERATOR 作业员 / VIEWER 只读），全部 API 需登录 |
 
 ## 目录结构
 
@@ -46,7 +47,21 @@ npm install
 npm run dev          # http://localhost:5173
 ```
 
-H2 控制台：<http://localhost:8080/h2>（JDBC URL `jdbc:h2:file:./data/wms`，用户 `sa`，无密码）。
+首次启动自动创建管理员 `admin`，初始密码取 `WMS_ADMIN_PASSWORD`（默认 `admin123`，仅供本地演示，登录后请修改）。
+
+H2 控制台默认关闭，排障时用 `WMS_H2_CONSOLE=true` 开启：<http://localhost:8080/h2>（JDBC URL `jdbc:h2:file:./data/wms`，用户 `sa`，无密码）。
+
+### 安全相关环境变量
+
+| 变量 | 说明 | 默认 |
+| --- | --- | --- |
+| `WMS_AUTH_SECRET` | 登录令牌签名密钥，**生产必须设置**；未设置时每次启动随机生成，重启后全员需重新登录 | 随机 |
+| `WMS_TOKEN_TTL` | 令牌有效期（Spring Duration 格式） | `12h` |
+| `WMS_ADMIN_PASSWORD` | 首次启动创建 admin 的初始密码 | `admin123` |
+| `WMS_CORS_ORIGINS` | 允许跨域的前端来源，逗号分隔；前后端同源部署可设为空 | `http://localhost:5173` |
+| `WMS_H2_CONSOLE` | 是否开启 H2 控制台 | `false` |
+
+角色权限：`ADMIN` 不受限；`OPERATOR` 可执行入库 / 出库 / 库内作业，不能修改基础数据与用户；`VIEWER` 只读（可改自己密码）。
 
 ### 使用 MySQL
 
@@ -65,16 +80,24 @@ DB_HOST=127.0.0.1 DB_PORT=3306 DB_NAME=wms DB_USER=root DB_PASSWORD=xxx \
 scripts/smoke.sh
 ```
 
-脚本依次完成：创建 ASN → 收货 → 上架 → 建出库单 → 分配（含部分分配）→ 拣货 → 发运 → 移库 / 冻结 / 调整 → 盘点过账 → 两单波次总拣 / 播种 / 波次发运 → 越库收货直发，并输出库存汇总与流水统计。
+脚本先校验匿名请求被拒（401）并以 `WMS_USER` / `WMS_PASS`（默认 admin / admin123）登录，再依次完成：创建 ASN → 收货 → 上架 → 建出库单 → 分配（含部分分配）→ 拣货 → 发运 → 移库 / 冻结 / 调整 → 盘点过账 → 两单波次总拣 / 播种 / 波次发运 → 越库收货直发，并输出库存汇总与流水统计。
 
-> 注意：H2 默认使用 `./data/wms` 文件库，`schema.sql` 仅 `CREATE TABLE IF NOT EXISTS`；升级到含越库 / 波次的版本时请删除旧的 `backend/data` 目录（或在 MySQL 中手工补充 `wms_asn.cross_dock_*`、`wms_pick_task.wave_id` 及 `wms_wave*` / `wms_sow_task` 表）。
+> 注意：H2 默认使用 `./data/wms` 文件库，`schema.sql` 仅 `CREATE TABLE IF NOT EXISTS`；升级到含越库 / 波次 / 登录鉴权的版本时请删除旧的 `backend/data` 目录（或在 MySQL 中手工补充 `wms_asn.cross_dock_*`、`wms_pick_task.wave_id` 及 `wms_wave*` / `wms_sow_task` / `wms_user` 表）。
+
+### 单元 / 集成测试
+
+```bash
+cd backend && mvn test   # 内存 H2：鉴权 API、角色策略、令牌 / 密码哈希、波次播种与越库业务闭环
+```
 
 ## API 概览
 
-统一返回 `{ code: 0, msg: "success", data: ... }`，业务错误 `code = 400`。
+统一返回 `{ code: 0, msg: "success", data: ... }`，业务错误 `code = 400`；未登录 / 令牌失效 HTTP 401，角色无权 HTTP 403。除登录外所有接口需携带 `Authorization: Bearer <token>`。
 
 | 模块 | 接口 |
 | --- | --- |
+| 认证 | `POST /api/auth/login`（username, password → token + user），`GET /api/auth/me`，`POST /api/auth/password`（oldPassword, newPassword），`POST /api/auth/logout` |
+| 用户 | `GET/POST/PUT/DELETE /api/system/user`（仅 ADMIN；至少保留一个启用的管理员） |
 | 基础数据 | `GET/POST /api/basic/{warehouse,zone,location,owner,item,supplier,customer}` `/page` `/list` `/{id}` |
 | 入库 | `POST /api/inbound/asn`，`/{id}/receive`，`/{id}/close-receiving`，`/{id}/cancel`，`GET /{id}/tasks`；`GET /api/inbound/putaway/page`，`POST /{taskId}/confirm` |
 | 出库 | `POST /api/outbound/order`，`/{id}/allocate`，`/{id}/deallocate`，`/{id}/ship`，`/{id}/cancel`；`GET /api/outbound/pick/page`，`POST /{taskId}/confirm` |

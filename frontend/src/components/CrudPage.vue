@@ -54,6 +54,7 @@
               <el-input-number v-else-if="c.type === 'number'" v-model="form[c.prop]" :min="c.min ?? 0" :precision="c.precision ?? 0" style="width: 100%" />
               <el-switch v-else-if="c.type === 'switch' || c.type === 'bool'" v-model="form[c.prop]" />
               <el-switch v-else-if="c.type === 'status'" v-model="form[c.prop]" :active-value="1" :inactive-value="0" active-text="启用" inactive-text="停用" />
+              <el-input v-else-if="c.type === 'password'" v-model="form[c.prop]" type="password" show-password autocomplete="new-password" :placeholder="c.placeholder" />
               <el-input v-else v-model="form[c.prop]" :disabled="!!form.id && c.readonlyOnEdit" />
             </el-form-item>
           </el-col>

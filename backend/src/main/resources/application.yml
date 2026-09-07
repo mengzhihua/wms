@@ -1,0 +1,69 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: wms-backend
+  datasource:
+    # 默认使用内嵌 H2 文件库，零配置启动；生产使用 --spring.profiles.active=mysql
+    url: jdbc:h2:file:./data/wms;MODE=MySQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+      data-locations: classpath:data.sql
+      continue-on-error: true
+  h2:
+    console:
+      # 仅开发排障时开启: WMS_H2_CONSOLE=true
+      enabled: ${WMS_H2_CONSOLE:false}
+      path: /h2
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+    default-property-inclusion: non_null
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+
+logging:
+  level:
+    com.wms: info
+
+wms:
+  auth:
+    # 令牌签名密钥；生产必须设置，否则每次重启随机生成导致全员重新登录
+    secret: ${WMS_AUTH_SECRET:}
+    token-ttl: ${WMS_TOKEN_TTL:12h}
+    # 首次启动创建 admin 时使用的初始密码
+    admin-password: ${WMS_ADMIN_PASSWORD:admin123}
+  cors:
+    # 允许跨域的前端来源，逗号分隔；前后端同源部署时可设为空
+    origins: ${WMS_CORS_ORIGINS:http://localhost:5173}
+
+---
+spring:
+  config:
+    activate:
+      on-profile: mysql
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:wms}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+  sql:
+    init:
+      mode: always
+      continue-on-error: false
+  h2:
+    console:
+      enabled: false

@@ -8,12 +8,13 @@
 
 | 模块 | 功能 |
 | --- | --- |
-| 基础数据 | 仓库、库区、库位（类型 / ABC / 拣货顺序 / 混放规则）、货主、物料（批次 / 效期 / 安全库存）、供应商、客户 |
-| 入库管理 | 入库通知单 ASN、按行收货（批次 / 效期 / 收货库位）、自动生成上架任务与推荐库位、上架确认、关闭收货、**越库（ASN 绑定出库单，收货直接分拨到发货暂存）** |
-| 出库管理 | 出库单、库存分配（FEFO → FIFO，仅存储/拣货位，支持部分分配）、取消分配、拣货任务确认（含少拣释放）、发运、**波次总拣 + 播种（多单合并拣货、按播种位分拨、波次发运）** |
-| 库内管理 | 库存查询、库存汇总、库存流水、移库、库存调整、冻结 / 解冻、盘点（生成快照 → 录入 → 差异 → 过账） |
+| 基础数据 | 仓库、库区、库位（类型 / ABC / 拣货顺序 / 混放规则）、货主、物料（批次 / 效期 / 安全库存 / 质检 / 序列号管理，CSV 导入导出）、供应商、客户、**包材 / 箱型**（尺寸、容积、承重，可关联包材 SKU） |
+| 入库管理 | 入库通知单 ASN、按行收货（批次 / 效期 / 收货库位 / SN 登记）、自动生成上架任务与推荐库位、上架确认、关闭收货、**收货质检放行 / 拒收**、**退货入库**（进质检位冻结）、**越库（ASN 绑定出库单，收货直接分拨到发货暂存）** |
+| 出库管理 | 出库单、库存分配（FEFO → FIFO，仅存储/拣货位，支持部分分配）、取消分配、拣货任务确认（含少拣释放）、**复核打包（箱型推荐、包材库存扣减、承运商 / 运单）**、发运（SN 物料需扫描序列号）、**波次总拣 + 播种（多单合并拣货、按播种位分拨、波次发运）** |
+| 库内管理 | 库存查询、库存汇总、库存流水（含 CSV 导出）、移库、库存调整、冻结 / 解冻、盘点（生成快照 → 录入 → 差异 → 过账）、**拣货位 Min/Max 补货**、**序列号 (SN/IMEI) 查询与追溯** |
+| 报表 | 库龄、效期预警、作业 KPI、**ABC 动态分析（可一键应用到物料）**、**操作员节点计件效能** |
 | 工作台 | 库位使用率、库存总量、待办入库 / 上架 / 出库 / 拣货、最近流水、安全库存预警 |
-| 系统管理 | 登录 / 登出 / 修改密码，用户管理（ADMIN 管理员 / OPERATOR 作业员 / VIEWER 只读），全部 API 需登录 |
+| 系统管理 | 登录 / 登出 / 修改密码，用户管理（ADMIN 管理员 / OPERATOR 作业员 / VIEWER 只读），操作日志审计，全部 API 需登录 |
 
 ## 目录结构
 
@@ -98,11 +99,15 @@ cd backend && mvn test   # 内存 H2：鉴权 API、角色策略、令牌 / 密�
 | --- | --- |
 | 认证 | `POST /api/auth/login`（username, password → token + user），`GET /api/auth/me`，`POST /api/auth/password`（oldPassword, newPassword），`POST /api/auth/logout` |
 | 用户 | `GET/POST/PUT/DELETE /api/system/user`（仅 ADMIN；至少保留一个启用的管理员） |
-| 基础数据 | `GET/POST /api/basic/{warehouse,zone,location,owner,item,supplier,customer}` `/page` `/list` `/{id}` |
-| 入库 | `POST /api/inbound/asn`，`/{id}/receive`，`/{id}/close-receiving`，`/{id}/cancel`，`GET /{id}/tasks`；`GET /api/inbound/putaway/page`，`POST /{taskId}/confirm` |
-| 出库 | `POST /api/outbound/order`，`/{id}/allocate`，`/{id}/deallocate`，`/{id}/ship`，`/{id}/cancel`；`GET /api/outbound/pick/page`，`POST /{taskId}/confirm` |
+| 基础数据 | `GET/POST /api/basic/{warehouse,zone,location,owner,item,supplier,customer,carton}` `/page` `/list` `/{id}`；`GET /api/basic/item/export`，`POST /api/basic/item/import`（CSV），`POST /api/basic/item/abc-apply`（ownerCode, days） |
+| 入库 | `POST /api/inbound/asn`，`/{id}/receive`（行可带 `serialNos`），`/{id}/close-receiving`，`/{id}/cancel`，`GET /{id}/tasks`，`/{id}/qc-tasks`；`GET /api/inbound/putaway/page`，`POST /{taskId}/confirm`；`GET /api/inbound/qc/page`，`POST /{taskId}/inspect`（passQty, rejectQty） |
+| 出库 | `POST /api/outbound/order`，`/{id}/allocate`，`/{id}/deallocate`，`GET /{id}/carton-suggest`，`POST /{id}/pack`（packageCount, grossWeight, carrier, trackingNo, cartonCode），`/{id}/ship`（carrier, trackingNo, serialNos），`/{id}/cancel`；`GET /api/outbound/pick/page`，`POST /{taskId}/confirm` |
 | 波次 | `GET /api/outbound/wave/page`，`/{id}`；`POST /api/outbound/wave`（orderIds），`/pick/{taskId}/confirm`（总拣，可少拣），`/sow/{taskId}/confirm`（播种，可分次），`/{id}/ship`，`/{id}/cancel` |
-| 库存 | `GET /api/inventory/page`，`/summary`，`/txn/page`；`POST /move`，`/adjust`，`/freeze` |
+| 库存 | `GET /api/inventory/page`，`/summary`，`/txn/page`，`/export`，`/txn/export`；`POST /move`，`/adjust`，`/freeze` |
+| 补货 | `GET /api/inventory/replenish/page`；`POST /api/inventory/replenish/generate`（Min/Max），`POST /api/inventory/replenish`，`/{id}/confirm`，`/{id}/cancel` |
+| 序列号 | `GET /api/inventory/serial/page`，`GET /api/inventory/serial/{serialNo}` |
+| 报表 | `GET /api/report/aging`，`/expiry`，`/kpi`，`/abc`（warehouseCode, ownerCode, days），`/labor`（days, operator） |
+| 审计 | `GET /api/system/oplog/page` |
 | 盘点 | `POST /api/inventory/count`，`/{id}/submit`，`/{id}/post`，`/{id}/cancel`，`GET /{id}/lines` |
 | 工作台 | `GET /api/dashboard` |
 
@@ -116,3 +121,9 @@ cd backend && mvn test   # 内存 H2：鉴权 API、角色策略、令牌 / 密�
 - **越库（Cross-Dock）**：ASN 填写 `crossDockOrderCode`（同仓同货主、未发运的出库单）后，收货时按物料 / 批次匹配出库单未分配需求，直接扣减收货暂存并写入 `STAGING_OUT`，生成已完成的 `XD` 拣货任务，出库单变为可发运；超出需求的数量仍走正常上架。
 - **波次 / 播种（Wave / Pick-to-Sort）**：选择同仓多张已分配出库单建波次，普通拣货任务按“库位 + 物料 + 批次”合并为总拣任务；总拣确认后数量按出库单优先级分摊到各单（少拣缺口自动释放），并按出库单生成带播种位的播种任务；全部播种完成后可整波发运。已入波次的任务不可在普通拣货页操作，出库单也不可取消分配，需先取消波次。
 - **盘点**：按仓库 / 库区生成账面快照，录入实盘后计算差异，过账时按差异写 `ADJUST` 流水。
+- **质检 / 退货**：物料 `qcRequired` 或 ASN 类型 `RETURN` 时，收货进入 `QC` 库位并冻结，生成质检任务；放行部分解冻并生成上架任务，拒收部分写 `QC_REJECT` 流水出库。
+- **序列号 (SN/IMEI)**：物料 `snControl` 时，收货必须逐一登记 SN（个数 = 数量，同货主唯一，在库 SN 不可重复收货）；发运必须扫描在库 SN 且每个物料数量与应发一致，发运后 SN 变为 `SHIPPED` 并记录出库单；退货收货可使已发运 SN 回库。
+- **箱型推荐 / 包材**：按订单已拣数量 × 物料体积 / 重量汇总，选择能容纳的最小箱型；单箱装不下时用最大箱型估算箱数。箱型关联包材 SKU 时，打包按箱数扣减包材库存（`PACK_CONSUME` 流水），不足报错。
+- **补货**：拣货位库存低于物料 `minStock` 时从存储位生成补货任务，补至 `maxStock`，确认后写 `REPLENISH` 流水。
+- **ABC 分析**：按周期内 `SHIP` 流水发运量降序累计，累计占比 < 70% 为 A、< 90% 为 B、其余 C；管理员可一键应用到物料 `abcClass`。
+- **计件效能**：基于库存流水 `operator` 按人 / 日统计收货、上架、拣货、发运、补货、质检拒收的数量与笔数。

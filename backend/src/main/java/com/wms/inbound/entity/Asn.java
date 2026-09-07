@@ -29,6 +29,10 @@ public class Asn extends BaseEntity {
     /** 越库: 收货后直接分拨到该出库单, 不上架 */
     private String crossDockOrderCode;
     private BigDecimal crossDockQty;
+    /** 退货入库(type=RETURN)时的客户 */
+    private String customerCode;
+    private BigDecimal qcQty;
+    private BigDecimal rejectedQty;
 
     @TableField(exist = false)
     private List<AsnLine> lines;

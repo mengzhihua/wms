@@ -75,6 +75,8 @@ CREATE TABLE IF NOT EXISTS wms_item (
   volume DECIMAL(18,3),
   min_stock DECIMAL(18,3),
   max_stock DECIMAL(18,3),
+  qc_required BOOLEAN DEFAULT FALSE,
+  sn_control BOOLEAN DEFAULT FALSE,
   status INT DEFAULT 1,
   created_at TIMESTAMP,
   updated_at TIMESTAMP,
@@ -190,6 +192,9 @@ CREATE TABLE IF NOT EXISTS wms_asn (
   putaway_qty DECIMAL(18,3),
   cross_dock_order_code VARCHAR(32),
   cross_dock_qty DECIMAL(18,3),
+  customer_code VARCHAR(32),
+  qc_qty DECIMAL(18,3),
+  rejected_qty DECIMAL(18,3),
   created_at TIMESTAMP,
   updated_at TIMESTAMP,
   CONSTRAINT uk_asn_code UNIQUE (code)
@@ -205,6 +210,7 @@ CREATE TABLE IF NOT EXISTS wms_asn_line (
   expected_qty DECIMAL(18,3) NOT NULL,
   received_qty DECIMAL(18,3) DEFAULT 0,
   putaway_qty DECIMAL(18,3) DEFAULT 0,
+  rejected_qty DECIMAL(18,3) DEFAULT 0,
   remark VARCHAR(255),
   created_at TIMESTAMP,
   updated_at TIMESTAMP
@@ -249,6 +255,12 @@ CREATE TABLE IF NOT EXISTS wms_ship_order (
   allocated_qty DECIMAL(18,3),
   picked_qty DECIMAL(18,3),
   shipped_qty DECIMAL(18,3),
+  tracking_no VARCHAR(64),
+  carton_code VARCHAR(32),
+  package_count INT,
+  gross_weight DECIMAL(18,3),
+  packed_at TIMESTAMP,
+  shipped_at TIMESTAMP,
   created_at TIMESTAMP,
   updated_at TIMESTAMP,
   CONSTRAINT uk_so_code UNIQUE (code)
@@ -358,3 +370,113 @@ CREATE TABLE IF NOT EXISTS wms_user (
   updated_at TIMESTAMP,
   CONSTRAINT uk_user_name UNIQUE (username)
 );
+
+-- ===================== 单号序列 / 操作日志 =====================
+CREATE TABLE IF NOT EXISTS wms_sequence (
+  prefix VARCHAR(16) NOT NULL,
+  day_key VARCHAR(8) NOT NULL,
+  seq_value INT NOT NULL,
+  PRIMARY KEY (prefix, day_key)
+);
+
+CREATE TABLE IF NOT EXISTS wms_op_log (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(64),
+  method VARCHAR(8),
+  path VARCHAR(255),
+  query VARCHAR(255),
+  http_status INT,
+  cost_ms INT,
+  client_ip VARCHAR(64),
+  created_at TIMESTAMP
+);
+CREATE INDEX idx_op_log_created ON wms_op_log (created_at);
+
+-- ===================== 包材/箱型 =====================
+CREATE TABLE IF NOT EXISTS wms_carton (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  code VARCHAR(32) NOT NULL,
+  name VARCHAR(64) NOT NULL,
+  length_cm DECIMAL(10,2),
+  width_cm DECIMAL(10,2),
+  height_cm DECIMAL(10,2),
+  volume DECIMAL(18,6),
+  max_weight DECIMAL(18,3),
+  owner_code VARCHAR(32),
+  item_code VARCHAR(64),
+  status INT DEFAULT 1,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP,
+  CONSTRAINT uk_carton_code UNIQUE (code)
+);
+
+-- ===================== 序列号(SN) =====================
+CREATE TABLE IF NOT EXISTS wms_serial (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  owner_code VARCHAR(32) NOT NULL,
+  item_code VARCHAR(64) NOT NULL,
+  serial_no VARCHAR(64) NOT NULL,
+  lot_no VARCHAR(64),
+  status VARCHAR(16),
+  asn_code VARCHAR(32),
+  order_code VARCHAR(32),
+  location_code VARCHAR(32),
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP,
+  CONSTRAINT uk_serial UNIQUE (owner_code, serial_no)
+);
+
+-- ===================== 质检 =====================
+CREATE TABLE IF NOT EXISTS wms_qc_task (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  code VARCHAR(32) NOT NULL,
+  asn_id BIGINT NOT NULL,
+  asn_line_id BIGINT NOT NULL,
+  asn_code VARCHAR(32),
+  warehouse_code VARCHAR(32),
+  owner_code VARCHAR(32),
+  item_code VARCHAR(64),
+  lot_no VARCHAR(64),
+  inventory_id BIGINT,
+  location_code VARCHAR(32),
+  qty DECIMAL(18,3),
+  pass_qty DECIMAL(18,3),
+  reject_qty DECIMAL(18,3),
+  reject_reason VARCHAR(255),
+  inspector VARCHAR(64),
+  status VARCHAR(16),
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP
+);
+
+-- ===================== 补货 =====================
+CREATE TABLE IF NOT EXISTS wms_replenish_task (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  code VARCHAR(32) NOT NULL,
+  warehouse_code VARCHAR(32) NOT NULL,
+  owner_code VARCHAR(32) NOT NULL,
+  item_code VARCHAR(64) NOT NULL,
+  lot_no VARCHAR(64),
+  inventory_id BIGINT,
+  from_location VARCHAR(32),
+  to_location VARCHAR(32),
+  qty DECIMAL(18,3),
+  status VARCHAR(16),
+  remark VARCHAR(255),
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP
+);
+
+-- ===================== 增量升级列（已存在时报错被 continue-on-error 忽略） =====================
+ALTER TABLE wms_item ADD COLUMN qc_required BOOLEAN DEFAULT FALSE;
+ALTER TABLE wms_asn ADD COLUMN customer_code VARCHAR(32);
+ALTER TABLE wms_asn ADD COLUMN qc_qty DECIMAL(18,3);
+ALTER TABLE wms_asn ADD COLUMN rejected_qty DECIMAL(18,3);
+ALTER TABLE wms_asn_line ADD COLUMN rejected_qty DECIMAL(18,3) DEFAULT 0;
+ALTER TABLE wms_ship_order ADD COLUMN tracking_no VARCHAR(64);
+ALTER TABLE wms_ship_order ADD COLUMN package_count INT;
+ALTER TABLE wms_ship_order ADD COLUMN gross_weight DECIMAL(18,3);
+ALTER TABLE wms_ship_order ADD COLUMN packed_at TIMESTAMP;
+ALTER TABLE wms_ship_order ADD COLUMN shipped_at TIMESTAMP;
+ALTER TABLE wms_ship_order ADD COLUMN carton_code VARCHAR(32);
+ALTER TABLE wms_item ADD COLUMN sn_control BOOLEAN DEFAULT FALSE;

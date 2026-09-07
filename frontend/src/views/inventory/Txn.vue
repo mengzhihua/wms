@@ -8,6 +8,7 @@
         <el-input v-model="query.itemCode" placeholder="物料" clearable @keyup.enter="load" @clear="load" style="width: 150px" />
         <el-input v-model="query.refNo" placeholder="单号" clearable @keyup.enter="load" @clear="load" style="width: 200px" />
         <el-button type="primary" @click="load"><el-icon><Search /></el-icon>查询</el-button>
+        <el-button @click="downloadCsv('/inventory/txn/export', query, 'inventory-txn.csv')">导出 CSV</el-button>
       </div>
       <el-table :data="rows" v-loading="loading" border stripe size="small">
         <el-table-column prop="id" label="ID" width="70" />
@@ -32,7 +33,7 @@
 
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
-import { inventory } from '../../api'
+import { inventory, downloadCsv } from '../../api'
 import StatusTag from '../../components/StatusTag.vue'
 import { fmt } from '../../utils'
 

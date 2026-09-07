@@ -57,9 +57,9 @@ public class DashboardController {
         m.put("inventoryRecords", stock.size());
         m.put("inventoryQty", stock.stream().map(Inventory::getQty).reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add));
         m.put("frozenRecords", stock.stream().filter(i -> "FROZEN".equals(i.getStatus())).count());
-        m.put("asnOpen", asnMapper.selectCount(new LambdaQueryWrapper<Asn>().in(Asn::getStatus, "NEW", "RECEIVING", "RECEIVED", "PUTAWAY")));
+        m.put("asnOpen", asnMapper.selectCount(new LambdaQueryWrapper<Asn>().in(Asn::getStatus, "NEW", "RECEIVING", "RECEIVED", "QC", "PUTAWAY")));
         m.put("putawayOpen", putawayMapper.selectCount(new LambdaQueryWrapper<PutawayTask>().eq(PutawayTask::getStatus, "NEW")));
-        m.put("orderOpen", orderMapper.selectCount(new LambdaQueryWrapper<ShipOrder>().in(ShipOrder::getStatus, "NEW", "ALLOCATED", "PART_ALLOCATED", "PICKING", "PICKED")));
+        m.put("orderOpen", orderMapper.selectCount(new LambdaQueryWrapper<ShipOrder>().in(ShipOrder::getStatus, "NEW", "ALLOCATED", "PART_ALLOCATED", "PICKING", "PICKED", "PACKED")));
         m.put("pickOpen", pickMapper.selectCount(new LambdaQueryWrapper<PickTask>().eq(PickTask::getStatus, "NEW")));
         m.put("recentTxns", txnMapper.selectList(new QueryWrapper<InventoryTxn>().orderByDesc("id").last("LIMIT 10")));
         m.put("lowStock", lowStock(stock));

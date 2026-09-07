@@ -41,7 +41,14 @@ const DICT = {
   SALES: ['销售出库', 'primary'],
   CROSS_DOCK: ['越库', 'danger'],
   SOWING: ['播种中', 'warning'],
-  SOWED: ['已播种', 'primary']
+  SOWED: ['已播种', 'primary'],
+  QC: ['质检中', 'warning'],
+  QC_REJECT: ['质检拒收', 'danger'],
+  PACKED: ['已打包', 'primary'],
+  REPLENISH: ['补货', 'primary'],
+  PACK_CONSUME: ['耗用包材', 'info'],
+  IN_STOCK: ['在库', 'success'],
+  RETURNED: ['已退回', 'warning']
 }
 
 const props = defineProps({ value: String })

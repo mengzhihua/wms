@@ -274,7 +274,7 @@ public class WaveService {
             throw new BizException("播种完成后才能发运");
         }
         for (ShipOrder o : orders(waveId)) {
-            if ("PICKED".equals(o.getStatus())) {
+            if ("PICKED".equals(o.getStatus()) || "PACKED".equals(o.getStatus())) {
                 orderService.ship(o.getId());
             }
         }

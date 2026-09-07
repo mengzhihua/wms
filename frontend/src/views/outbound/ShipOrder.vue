@@ -24,13 +24,15 @@
         <el-table-column prop="allocatedQty" label="已分配" width="80" />
         <el-table-column prop="pickedQty" label="已拣货" width="80" />
         <el-table-column prop="shippedQty" label="已发运" width="80" />
-        <el-table-column label="操作" width="300" fixed="right">
+        <el-table-column prop="trackingNo" label="运单号" width="130" show-overflow-tooltip />
+        <el-table-column label="操作" width="320" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="openDetail(row)">详情</el-button>
             <el-button v-if="row.status === 'NEW'" link type="primary" size="small" @click="openForm(row)">编辑</el-button>
             <el-button v-if="['NEW', 'PART_ALLOCATED'].includes(row.status)" link type="success" size="small" @click="act(outbound.allocate, row, '分配完成')">分配</el-button>
             <el-button v-if="['ALLOCATED', 'PART_ALLOCATED'].includes(row.status)" link type="warning" size="small" @click="act(outbound.deallocate, row, '已取消分配')">取消分配</el-button>
-            <el-button v-if="row.status === 'PICKED'" link type="success" size="small" @click="act(outbound.ship, row, '发运完成')">发运</el-button>
+            <el-button v-if="row.status === 'PICKED'" link type="primary" size="small" @click="openPack(row)">复核打包</el-button>
+            <el-button v-if="['PICKED', 'PACKED'].includes(row.status)" link type="success" size="small" @click="openShip(row)">发运</el-button>
             <el-popconfirm v-if="['NEW', 'ALLOCATED', 'PART_ALLOCATED'].includes(row.status)" title="确认取消该出库单?" @confirm="act(outbound.cancel, row, '已取消')">
               <template #reference><el-button link type="danger" size="small">取消</el-button></template>
             </el-popconfirm>
@@ -77,6 +79,49 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="packVisible" :title="`复核打包 ${current.code}`" width="720px" destroy-on-close>
+      <el-alert v-if="suggest.carton" type="success" :closable="false" style="margin-bottom: 10px">
+        推荐箱型 <b>{{ suggest.carton.code }} {{ suggest.carton.name }}</b> × {{ suggest.packageCount }}（商品体积 {{ suggest.totalVolume }} m³，重量 {{ suggest.totalWeight }} kg）
+      </el-alert>
+      <el-alert v-else type="info" :closable="false" style="margin-bottom: 10px">未配置箱型或物料无体积/重量，无法推荐</el-alert>
+      <el-table :data="current.lines || []" size="small" border style="margin-bottom: 12px">
+        <el-table-column prop="itemCode" label="物料" />
+        <el-table-column prop="orderQty" label="订单" width="80" />
+        <el-table-column prop="pickedQty" label="已拣" width="80" />
+        <el-table-column label="复核" width="90"><template #default="{ row }"><el-tag size="small" :type="row.pickedQty >= row.orderQty ? 'success' : 'warning'">{{ row.pickedQty >= row.orderQty ? '一致' : '短拣' }}</el-tag></template></el-table-column>
+      </el-table>
+      <el-form :model="packForm" label-width="90px" :inline="true">
+        <el-form-item label="箱型">
+          <el-select v-model="packForm.cartonCode" clearable style="width: 220px">
+            <el-option v-for="c in suggest.cartons || []" :key="c.code" :label="`${c.code} ${c.name}${c.itemCode ? '（扣包材 ' + c.itemCode + '）' : ''}`" :value="c.code" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="箱数" required><el-input-number v-model="packForm.packageCount" :min="1" style="width: 140px" /></el-form-item>
+        <el-form-item label="毛重(kg)"><el-input-number v-model="packForm.grossWeight" :min="0" :precision="3" style="width: 140px" /></el-form-item>
+        <el-form-item label="承运商"><el-input v-model="packForm.carrier" style="width: 160px" /></el-form-item>
+        <el-form-item label="运单号"><el-input v-model="packForm.trackingNo" style="width: 220px" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="packVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="doPack">确认打包</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="shipVisible" :title="`发运 ${current.code}`" width="560px" destroy-on-close>
+      <el-form :model="shipForm" label-width="90px">
+        <el-form-item label="承运商"><el-input v-model="shipForm.carrier" /></el-form-item>
+        <el-form-item label="运单号"><el-input v-model="shipForm.trackingNo" /></el-form-item>
+        <el-form-item v-if="snLines.length" label="序列号">
+          <el-input v-model="shipForm.serialText" type="textarea" :rows="6" :placeholder="`扫描/粘贴 SN，每行一个。需登记：${snLines.map((l) => l.itemCode + ' × ' + l.pickedQty).join('，')}`" />
+          <div class="muted">已录入 {{ serialNos.length }} 个</div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="shipVisible = false">取消</el-button>
+        <el-button type="success" :loading="saving" @click="doShip">确认发运</el-button>
+      </template>
+    </el-dialog>
+
     <el-drawer v-model="detailVisible" :title="`出库单 ${current.code}`" size="60%">
       <el-descriptions :column="3" border size="small">
         <el-descriptions-item label="状态"><StatusTag :value="current.status" /></el-descriptions-item>
@@ -84,6 +129,9 @@
         <el-descriptions-item label="货主">{{ current.ownerCode }}</el-descriptions-item>
         <el-descriptions-item label="客户">{{ current.customerCode }}</el-descriptions-item>
         <el-descriptions-item label="承运商">{{ current.carrier }}</el-descriptions-item>
+        <el-descriptions-item label="运单号">{{ current.trackingNo }}</el-descriptions-item>
+        <el-descriptions-item label="箱型/箱数">{{ current.cartonCode }} {{ current.packageCount ? '× ' + current.packageCount : '' }}</el-descriptions-item>
+        <el-descriptions-item label="毛重(kg)">{{ current.grossWeight }}</el-descriptions-item>
         <el-descriptions-item label="地址">{{ current.address }}</el-descriptions-item>
       </el-descriptions>
       <h4>明细</h4>
@@ -118,7 +166,7 @@ import { outbound } from '../../api'
 import { useOptions } from '../../composables/useOptions'
 import StatusTag from '../../components/StatusTag.vue'
 
-const STATUSES = ['NEW', 'ALLOCATED', 'PART_ALLOCATED', 'PICKING', 'PICKED', 'SHIPPED', 'CANCELLED']
+const STATUSES = ['NEW', 'ALLOCATED', 'PART_ALLOCATED', 'PICKING', 'PICKED', 'PACKED', 'SHIPPED', 'CANCELLED']
 const { options } = useOptions(['warehouse', 'owner', 'customer', 'item'])
 
 const rows = ref([])
@@ -131,8 +179,18 @@ const form = ref({ lines: [] })
 const detailVisible = ref(false)
 const current = ref({})
 const tasks = ref([])
+const packVisible = ref(false)
+const packForm = ref({})
+const suggest = ref({})
+const shipVisible = ref(false)
+const shipForm = ref({})
 
 const ownerItems = computed(() => (options.value.item || []).filter((i) => i.ownerCode === form.value.ownerCode))
+const snLines = computed(() => (current.value.lines || []).filter((l) => {
+  const it = (options.value.item || []).find((i) => i.ownerCode === current.value.ownerCode && i.value === l.itemCode)
+  return it && it.snControl && l.pickedQty > 0
+}))
+const serialNos = computed(() => (shipForm.value.serialText || '').split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean))
 
 async function load() {
   loading.value = true
@@ -168,6 +226,49 @@ async function act(fn, row, msg) {
   if (res && res.status === 'PART_ALLOCATED') ElMessage.warning('库存不足，仅部分分配')
   else ElMessage.success(msg)
   load()
+}
+
+async function openPack(row) {
+  current.value = await outbound.get(row.id)
+  suggest.value = await outbound.cartonSuggest(row.id)
+  packForm.value = {
+    cartonCode: suggest.value.carton ? suggest.value.carton.code : '',
+    packageCount: suggest.value.packageCount || 1,
+    grossWeight: suggest.value.totalWeight || undefined,
+    carrier: current.value.carrier,
+    trackingNo: current.value.trackingNo
+  }
+  packVisible.value = true
+}
+
+async function doPack() {
+  saving.value = true
+  try {
+    await outbound.pack(current.value.id, packForm.value)
+    ElMessage.success('打包完成')
+    packVisible.value = false
+    load()
+  } finally {
+    saving.value = false
+  }
+}
+
+async function openShip(row) {
+  current.value = await outbound.get(row.id)
+  shipForm.value = { carrier: current.value.carrier, trackingNo: current.value.trackingNo, serialText: '' }
+  shipVisible.value = true
+}
+
+async function doShip() {
+  saving.value = true
+  try {
+    await outbound.ship(current.value.id, { carrier: shipForm.value.carrier, trackingNo: shipForm.value.trackingNo, serialNos: serialNos.value })
+    ElMessage.success('发运完成')
+    shipVisible.value = false
+    load()
+  } finally {
+    saving.value = false
+  }
 }
 
 async function openDetail(row) {

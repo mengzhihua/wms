@@ -8,6 +8,7 @@ import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
@@ -30,6 +31,12 @@ public class ShipOrder extends BaseEntity {
     private BigDecimal allocatedQty;
     private BigDecimal pickedQty;
     private BigDecimal shippedQty;
+    private String trackingNo;
+    private String cartonCode;
+    private Integer packageCount;
+    private BigDecimal grossWeight;
+    private LocalDateTime packedAt;
+    private LocalDateTime shippedAt;
 
     @TableField(exist = false)
     private List<ShipOrderLine> lines;

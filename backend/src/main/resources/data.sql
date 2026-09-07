@@ -46,8 +46,13 @@ INSERT INTO wms_item (owner_code, code, name, spec, unit, pack_qty, barcode, cat
 SELECT 'OWN01', 'SKU002', '机械键盘 K87', '白色 87键', 'EA', 10, '6901234567891', '电脑配件', TRUE, 730, 'A', 0.85, 0.003, 30, 1000, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wms_item WHERE owner_code='OWN01' AND code='SKU002');
 INSERT INTO wms_item (owner_code, code, name, spec, unit, pack_qty, barcode, category, lot_control, shelf_life_days, abc_class, weight, volume, min_stock, max_stock, status, created_at, updated_at)
 SELECT 'OWN01', 'SKU003', 'USB-C 数据线 1m', '1米', 'EA', 100, '6901234567892', '线材', FALSE, NULL, 'B', 0.03, 0.0001, 200, 5000, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wms_item WHERE owner_code='OWN01' AND code='SKU003');
+INSERT INTO wms_item (owner_code, code, name, spec, unit, pack_qty, barcode, category, lot_control, shelf_life_days, abc_class, weight, volume, min_stock, max_stock, qc_required, status, created_at, updated_at)
+SELECT 'OWN01', 'SKU004', '27寸显示器', '2K 144Hz', 'EA', 1, '6901234567893', '显示设备', FALSE, NULL, 'C', 5.5, 0.05, 5, 200, TRUE, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wms_item WHERE owner_code='OWN01' AND code='SKU004');
+
+INSERT INTO wms_item (owner_code, code, name, spec, unit, pack_qty, barcode, category, lot_control, shelf_life_days, abc_class, weight, volume, min_stock, max_stock, sn_control, status, created_at, updated_at)
+SELECT 'OWN01', 'SKU005', '智能手机 X1', '256G 黑', 'EA', 1, '6901234567894', '手机', FALSE, NULL, 'A', 0.25, 0.0008, 10, 500, TRUE, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wms_item WHERE owner_code='OWN01' AND code='SKU005');
 INSERT INTO wms_item (owner_code, code, name, spec, unit, pack_qty, barcode, category, lot_control, shelf_life_days, abc_class, weight, volume, min_stock, max_stock, status, created_at, updated_at)
-SELECT 'OWN01', 'SKU004', '27寸显示器', '2K 144Hz', 'EA', 1, '6901234567893', '显示设备', FALSE, NULL, 'C', 5.5, 0.05, 5, 200, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wms_item WHERE owner_code='OWN01' AND code='SKU004');
+SELECT 'OWN01', 'PKG-BOX-M', '中号纸箱(包材)', '40x30x25', 'EA', 50, NULL, '包材', FALSE, NULL, 'C', 0.3, 0.03, 100, 2000, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wms_item WHERE owner_code='OWN01' AND code='PKG-BOX-M');
 
 INSERT INTO wms_supplier (code, name, contact, phone, address, status, created_at, updated_at)
 SELECT 'SUP01', '深圳精密电子厂', '王强', '13700000001', '深圳市宝安区', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wms_supplier WHERE code='SUP01');
@@ -58,3 +63,11 @@ INSERT INTO wms_customer (code, name, contact, phone, address, status, created_a
 SELECT 'CUS01', '京东华东仓', '刘洋', '13600000001', '江苏省昆山市', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wms_customer WHERE code='CUS01');
 INSERT INTO wms_customer (code, name, contact, phone, address, status, created_at, updated_at)
 SELECT 'CUS02', '苏宁易购南京店', '陈静', '13600000002', '江苏省南京市', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wms_customer WHERE code='CUS02');
+
+-- 包材/箱型（体积 m³ = 长*宽*高 / 1e6）
+INSERT INTO wms_carton (code, name, length_cm, width_cm, height_cm, volume, max_weight, status, created_at, updated_at)
+SELECT 'BOX-S', '小号纸箱', 20, 15, 10, 0.003, 5, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wms_carton WHERE code='BOX-S');
+INSERT INTO wms_carton (code, name, length_cm, width_cm, height_cm, volume, max_weight, owner_code, item_code, status, created_at, updated_at)
+SELECT 'BOX-M', '中号纸箱', 40, 30, 25, 0.03, 15, 'OWN01', 'PKG-BOX-M', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wms_carton WHERE code='BOX-M');
+INSERT INTO wms_carton (code, name, length_cm, width_cm, height_cm, volume, max_weight, status, created_at, updated_at)
+SELECT 'BOX-L', '大号纸箱', 60, 40, 40, 0.096, 30, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wms_carton WHERE code='BOX-L');

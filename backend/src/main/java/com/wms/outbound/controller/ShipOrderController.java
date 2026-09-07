@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/outbound")
@@ -64,9 +65,30 @@ public class ShipOrderController {
         return R.ok(service.deallocate(id));
     }
 
+    @Data
+    public static class PackReq {
+        private Integer packageCount;
+        private BigDecimal grossWeight;
+        private String carrier;
+        private String trackingNo;
+        private String cartonCode;
+        private List<String> serialNos;
+    }
+
+    @GetMapping("/order/{id}/carton-suggest")
+    public R<Map<String, Object>> cartonSuggest(@PathVariable Long id) {
+        return R.ok(service.suggestCarton(id));
+    }
+
+    @PostMapping("/order/{id}/pack")
+    public R<ShipOrder> pack(@PathVariable Long id, @RequestBody PackReq req) {
+        return R.ok(service.pack(id, req.getPackageCount(), req.getGrossWeight(), req.getCarrier(), req.getTrackingNo(), req.getCartonCode()));
+    }
+
     @PostMapping("/order/{id}/ship")
-    public R<ShipOrder> ship(@PathVariable Long id) {
-        return R.ok(service.ship(id));
+    public R<ShipOrder> ship(@PathVariable Long id, @RequestBody(required = false) PackReq req) {
+        return R.ok(service.ship(id, req == null ? null : req.getCarrier(), req == null ? null : req.getTrackingNo(),
+                req == null ? null : req.getSerialNos()));
     }
 
     @PostMapping("/order/{id}/cancel")

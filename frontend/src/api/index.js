@@ -16,7 +16,9 @@ export const basic = {
   owner: crud('/basic/owner'),
   item: crud('/basic/item'),
   supplier: crud('/basic/supplier'),
-  customer: crud('/basic/customer')
+  customer: crud('/basic/customer'),
+  carton: crud('/basic/carton'),
+  itemAbcApply: (data) => http.post('/basic/item/abc-apply', data)
 }
 
 export const inbound = {
@@ -29,7 +31,10 @@ export const inbound = {
   closeReceiving: (id) => http.post(`/inbound/asn/${id}/close-receiving`),
   tasks: (id) => http.get(`/inbound/asn/${id}/tasks`),
   putawayPage: (params) => http.get('/inbound/putaway/page', { params }),
-  putaway: (taskId, toLocation) => http.post(`/inbound/putaway/${taskId}/confirm`, { toLocation })
+  putaway: (taskId, toLocation) => http.post(`/inbound/putaway/${taskId}/confirm`, { toLocation }),
+  qcTasks: (id) => http.get(`/inbound/asn/${id}/qc-tasks`),
+  qcPage: (params) => http.get('/inbound/qc/page', { params }),
+  inspect: (taskId, data) => http.post(`/inbound/qc/${taskId}/inspect`, data)
 }
 
 export const outbound = {
@@ -39,7 +44,9 @@ export const outbound = {
   update: (id, data) => http.put(`/outbound/order/${id}`, data),
   allocate: (id) => http.post(`/outbound/order/${id}/allocate`),
   deallocate: (id) => http.post(`/outbound/order/${id}/deallocate`),
-  ship: (id) => http.post(`/outbound/order/${id}/ship`),
+  ship: (id, data) => http.post(`/outbound/order/${id}/ship`, data || {}),
+  pack: (id, data) => http.post(`/outbound/order/${id}/pack`, data),
+  cartonSuggest: (id) => http.get(`/outbound/order/${id}/carton-suggest`),
   cancel: (id) => http.post(`/outbound/order/${id}/cancel`),
   tasks: (id) => http.get(`/outbound/order/${id}/tasks`),
   pickPage: (params) => http.get('/outbound/pick/page', { params }),
@@ -65,7 +72,38 @@ export const inventory = {
   countCreate: (data) => http.post('/inventory/count', data),
   countSubmit: (id, counts) => http.post(`/inventory/count/${id}/submit`, counts),
   countPost: (id) => http.post(`/inventory/count/${id}/post`),
-  countCancel: (id) => http.post(`/inventory/count/${id}/cancel`)
+  countCancel: (id) => http.post(`/inventory/count/${id}/cancel`),
+  replenishPage: (params) => http.get('/inventory/replenish/page', { params }),
+  replenishGenerate: (data) => http.post('/inventory/replenish/generate', data),
+  replenishCreate: (data) => http.post('/inventory/replenish', data),
+  replenishConfirm: (id, toLocation) => http.post(`/inventory/replenish/${id}/confirm`, { toLocation }),
+  replenishCancel: (id) => http.post(`/inventory/replenish/${id}/cancel`),
+  serialPage: (params) => http.get('/inventory/serial/page', { params }),
+  serialTrace: (serialNo, params) => http.get(`/inventory/serial/${encodeURIComponent(serialNo)}`, { params })
+}
+
+export const report = {
+  aging: (params) => http.get('/report/aging', { params }),
+  expiry: (params) => http.get('/report/expiry', { params }),
+  kpi: (params) => http.get('/report/kpi', { params }),
+  abc: (params) => http.get('/report/abc', { params }),
+  labor: (params) => http.get('/report/labor', { params })
+}
+
+/** 带 token 下载后端 CSV（使用 blob，避开 URL 中传 token） */
+export async function downloadCsv(url, params, filename) {
+  const blob = await http.get(url, { params, responseType: 'blob' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+
+export function importCsv(url, file) {
+  const fd = new FormData()
+  fd.append('file', file)
+  return http.post(url, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
 }
 
 export const dashboard = () => http.get('/dashboard')
@@ -78,5 +116,6 @@ export const authApi = {
 }
 
 export const system = {
-  user: crud('/system/user')
+  user: crud('/system/user'),
+  oplogPage: (params) => http.get('/system/oplog/page', { params })
 }

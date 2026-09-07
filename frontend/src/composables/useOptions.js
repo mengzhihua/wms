@@ -9,7 +9,8 @@ export function useOptions(kinds) {
     zone: async () => (await basic.zone.list()).map((z) => ({ label: `${z.code} ${z.name}`, value: z.code, warehouseCode: z.warehouseCode })),
     location: async () => (await basic.location.list()).map((l) => ({ label: l.code, value: l.code, type: l.type, warehouseCode: l.warehouseCode })),
     owner: async () => (await basic.owner.list()).map((o) => ({ label: `${o.code} ${o.name}`, value: o.code })),
-    item: async () => (await basic.item.list()).map((i) => ({ label: `${i.code} ${i.name}`, value: i.code, ownerCode: i.ownerCode, lotControl: i.lotControl })),
+    item: async () => (await basic.item.list()).map((i) => ({ label: `${i.code} ${i.name}`, value: i.code, ownerCode: i.ownerCode, lotControl: i.lotControl, snControl: i.snControl })),
+    carton: async () => (await basic.carton.list()).map((c) => ({ label: `${c.code} ${c.name}`, value: c.code, itemCode: c.itemCode })),
     supplier: async () => (await basic.supplier.list()).map((s) => ({ label: `${s.code} ${s.name}`, value: s.code })),
     customer: async () => (await basic.customer.list()).map((c) => ({ label: `${c.code} ${c.name}`, value: c.code }))
   }

@@ -9,12 +9,17 @@ import com.wms.common.CodeGenerator;
 import com.wms.inbound.entity.Asn;
 import com.wms.inbound.entity.AsnLine;
 import com.wms.inbound.entity.PutawayTask;
+import com.wms.inbound.entity.QcTask;
 import com.wms.inbound.mapper.AsnLineMapper;
 import com.wms.inbound.mapper.AsnMapper;
 import com.wms.inbound.mapper.PutawayTaskMapper;
+import com.wms.inbound.mapper.QcTaskMapper;
 import com.wms.inventory.entity.Inventory;
 import com.wms.inventory.service.InventoryService;
+import com.wms.inventory.service.SerialService;
 import com.wms.outbound.service.CrossDockService;
+import com.wms.system.auth.CurrentUser;
+import com.wms.system.entity.User;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -27,6 +32,7 @@ import java.util.stream.Collectors;
 
 /**
  * 入库流程: ASN(NEW) -> 收货(RECEIVING/RECEIVED, 库存进入收货暂存区) -> 上架任务 -> 上架确认(PUTAWAY -> CLOSED)
+ * 需质检的物料(item.qcRequired)或退货入库(type=RETURN)在收货时进入质检位并冻结，质检放行后才生成上架任务。
  */
 @Service
 @RequiredArgsConstructor
@@ -35,9 +41,11 @@ public class AsnService {
     private final AsnMapper asnMapper;
     private final AsnLineMapper lineMapper;
     private final PutawayTaskMapper taskMapper;
+    private final QcTaskMapper qcTaskMapper;
     private final ItemMapper itemMapper;
     private final InventoryService inventoryService;
     private final CrossDockService crossDockService;
+    private final SerialService serialService;
     private final CodeGenerator codeGenerator;
 
     // ------------------------------------------------------------------ CRUD
@@ -51,6 +59,8 @@ public class AsnService {
         asn.setReceivedQty(BigDecimal.ZERO);
         asn.setPutawayQty(BigDecimal.ZERO);
         asn.setCrossDockQty(BigDecimal.ZERO);
+        asn.setQcQty(BigDecimal.ZERO);
+        asn.setRejectedQty(BigDecimal.ZERO);
         asn.setCrossDockOrderCode(blankToNull(asn.getCrossDockOrderCode()));
         asn.setTotalQty(asn.getLines().stream().map(AsnLine::getExpectedQty).reduce(BigDecimal.ZERO, BigDecimal::add));
         asnMapper.insert(asn);
@@ -68,6 +78,7 @@ public class AsnService {
         db.setWarehouseCode(asn.getWarehouseCode());
         db.setOwnerCode(asn.getOwnerCode());
         db.setSupplierCode(asn.getSupplierCode());
+        db.setCustomerCode(asn.getCustomerCode());
         db.setType(asn.getType());
         db.setExpectedDate(asn.getExpectedDate());
         db.setExternalNo(asn.getExternalNo());
@@ -108,6 +119,8 @@ public class AsnService {
         private LocalDate expiryDate;
         /** optional; defaults to the warehouse STAGING_IN location */
         private String locationCode;
+        /** 序列号管理物料必填，个数 = qty */
+        private List<String> serialNos;
     }
 
     @Transactional
@@ -120,6 +133,7 @@ public class AsnService {
             throw new BizException("收货明细为空");
         }
         Location staging = inventoryService.requireLocationByType(asn.getWarehouseCode(), "STAGING_IN");
+        boolean isReturn = "RETURN".equals(asn.getType());
         for (ReceiveLine r : receipts) {
             if (r.getQty() == null || r.getQty().signum() <= 0) {
                 continue;
@@ -141,10 +155,17 @@ public class AsnService {
             if (expiry == null && item.getShelfLifeDays() != null && item.getShelfLifeDays() > 0) {
                 expiry = LocalDate.now().plusDays(item.getShelfLifeDays());
             }
+            boolean needQc = isReturn || Boolean.TRUE.equals(item.getQcRequired());
             String loc = r.getLocationCode() != null && !r.getLocationCode().isEmpty() ? r.getLocationCode() : staging.getCode();
+            if (needQc) {
+                loc = inventoryService.requireLocationByType(asn.getWarehouseCode(), "QC").getCode();
+            }
 
             Inventory inv = inventoryService.add(asn.getWarehouseCode(), loc, asn.getOwnerCode(), line.getItemCode(),
                     lot, r.getQty(), expiry, asn.getCode(), "RECEIVE", null);
+            if (Boolean.TRUE.equals(item.getSnControl())) {
+                serialService.receive(asn.getOwnerCode(), item.getCode(), lot, loc, asn.getCode(), r.getQty(), r.getSerialNos());
+            }
 
             line.setReceivedQty(nz(line.getReceivedQty()).add(r.getQty()));
             if (line.getLotNo() == null || line.getLotNo().isEmpty()) {
@@ -154,6 +175,25 @@ public class AsnService {
             asn.setReceivedQty(nz(asn.getReceivedQty()).add(r.getQty()));
 
             BigDecimal toPutaway = r.getQty();
+            if (needQc) {
+                inventoryService.setFrozen(inv.getId(), true, "待质检 " + asn.getCode());
+                QcTask qc = new QcTask();
+                qc.setCode(codeGenerator.next("QC"));
+                qc.setAsnId(asnId);
+                qc.setAsnLineId(line.getId());
+                qc.setAsnCode(asn.getCode());
+                qc.setWarehouseCode(asn.getWarehouseCode());
+                qc.setOwnerCode(asn.getOwnerCode());
+                qc.setItemCode(line.getItemCode());
+                qc.setLotNo(lot == null ? "" : lot);
+                qc.setInventoryId(inv.getId());
+                qc.setLocationCode(loc);
+                qc.setQty(r.getQty());
+                qc.setStatus("NEW");
+                qcTaskMapper.insert(qc);
+                asn.setQcQty(nz(asn.getQcQty()).add(r.getQty()));
+                continue;
+            }
             if (asn.getCrossDockOrderCode() != null) {
                 BigDecimal xd = crossDockService.crossDock(asn.getCrossDockOrderCode(), inv, r.getQty(), asn.getCode());
                 asn.setCrossDockQty(nz(asn.getCrossDockQty()).add(xd));
@@ -163,22 +203,7 @@ public class AsnService {
                 }
             }
 
-            PutawayTask task = new PutawayTask();
-            task.setCode(codeGenerator.next("PA"));
-            task.setAsnId(asnId);
-            task.setAsnLineId(line.getId());
-            task.setAsnCode(asn.getCode());
-            task.setWarehouseCode(asn.getWarehouseCode());
-            task.setOwnerCode(asn.getOwnerCode());
-            task.setItemCode(line.getItemCode());
-            task.setLotNo(lot == null ? "" : lot);
-            task.setInventoryId(inv.getId());
-            task.setFromLocation(loc);
-            task.setSuggestLocation(inventoryService.suggestPutawayLocation(asn.getWarehouseCode(), asn.getOwnerCode(),
-                    line.getItemCode(), lot, reservedByPendingTasks(asn.getWarehouseCode())));
-            task.setQty(toPutaway);
-            task.setStatus("NEW");
-            taskMapper.insert(task);
+            createPutawayTask(asn, line, lot, inv.getId(), loc, toPutaway);
         }
         boolean complete = load(asnId).getLines().stream()
                 .allMatch(l -> nz(l.getReceivedQty()).compareTo(l.getExpectedQty()) >= 0);
@@ -186,6 +211,79 @@ public class AsnService {
         asnMapper.updateById(asn);
         refreshStatus(asnId);
         return load(asnId);
+    }
+
+    private PutawayTask createPutawayTask(Asn asn, AsnLine line, String lot, Long inventoryId, String fromLoc, BigDecimal qty) {
+        PutawayTask task = new PutawayTask();
+        task.setCode(codeGenerator.next("PA"));
+        task.setAsnId(asn.getId());
+        task.setAsnLineId(line.getId());
+        task.setAsnCode(asn.getCode());
+        task.setWarehouseCode(asn.getWarehouseCode());
+        task.setOwnerCode(asn.getOwnerCode());
+        task.setItemCode(line.getItemCode());
+        task.setLotNo(lot == null ? "" : lot);
+        task.setInventoryId(inventoryId);
+        task.setFromLocation(fromLoc);
+        task.setSuggestLocation(inventoryService.suggestPutawayLocation(asn.getWarehouseCode(), asn.getOwnerCode(),
+                line.getItemCode(), lot, reservedByPendingTasks(asn.getWarehouseCode())));
+        task.setQty(qty);
+        task.setStatus("NEW");
+        taskMapper.insert(task);
+        return task;
+    }
+
+    // ------------------------------------------------------------------ QC
+
+    /** 质检放行：合格数量生成上架任务，拒收数量直接从质检位扣减出库（供应商退货/报废） */
+    @Transactional
+    public QcTask inspect(Long taskId, BigDecimal passQty, BigDecimal rejectQty, String rejectReason) {
+        QcTask task = qcTaskMapper.selectById(taskId);
+        if (task == null) {
+            throw new BizException("质检任务不存在");
+        }
+        if (!"NEW".equals(task.getStatus())) {
+            throw new BizException("质检任务已处理");
+        }
+        BigDecimal pass = nz(passQty);
+        BigDecimal reject = nz(rejectQty);
+        if (pass.signum() < 0 || reject.signum() < 0 || pass.add(reject).compareTo(task.getQty()) != 0) {
+            throw new BizException("合格数量 + 拒收数量必须等于质检数量 " + task.getQty());
+        }
+        if (reject.signum() > 0 && (rejectReason == null || rejectReason.trim().isEmpty())) {
+            throw new BizException("拒收必须填写原因");
+        }
+        Asn asn = require(task.getAsnId());
+        AsnLine line = lineMapper.selectById(task.getAsnLineId());
+        inventoryService.setFrozen(task.getInventoryId(), false, "质检完成 " + task.getCode());
+        if (reject.signum() > 0) {
+            inventoryService.deduct(task.getInventoryId(), reject, false, asn.getCode(), "QC_REJECT");
+            line.setRejectedQty(nz(line.getRejectedQty()).add(reject));
+            asn.setRejectedQty(nz(asn.getRejectedQty()).add(reject));
+        }
+        if (pass.signum() > 0) {
+            createPutawayTask(asn, line, task.getLotNo(), task.getInventoryId(), task.getLocationCode(), pass);
+        }
+        lineMapper.updateById(line);
+        asn.setQcQty(nz(asn.getQcQty()).subtract(task.getQty()));
+        asnMapper.updateById(asn);
+
+        task.setPassQty(pass);
+        task.setRejectQty(reject);
+        task.setRejectReason(rejectReason);
+        User u = CurrentUser.get();
+        task.setInspector(u != null ? u.getUsername() : "system");
+        task.setStatus("DONE");
+        qcTaskMapper.updateById(task);
+        refreshStatus(asn.getId());
+        return task;
+    }
+
+    public List<QcTask> qcTasks(Long asnId, String status) {
+        return qcTaskMapper.selectList(new LambdaQueryWrapper<QcTask>()
+                .eq(asnId != null, QcTask::getAsnId, asnId)
+                .eq(status != null && !status.isEmpty(), QcTask::getStatus, status)
+                .orderByAsc(QcTask::getId));
     }
 
     /** Mark receiving finished even if short (短收关闭收货). */
@@ -266,7 +364,15 @@ public class AsnService {
         Asn asn = require(asnId);
         long open = taskMapper.selectCount(new LambdaQueryWrapper<PutawayTask>()
                 .eq(PutawayTask::getAsnId, asnId).eq(PutawayTask::getStatus, "NEW"));
-        if (open > 0) {
+        long openQc = qcTaskMapper.selectCount(new LambdaQueryWrapper<QcTask>()
+                .eq(QcTask::getAsnId, asnId).eq(QcTask::getStatus, "NEW"));
+        if (openQc > 0) {
+            if ("RECEIVED".equals(asn.getStatus()) || "PUTAWAY".equals(asn.getStatus())) {
+                asn.setStatus("QC");
+            }
+        } else if ("QC".equals(asn.getStatus())) {
+            asn.setStatus(open > 0 ? "PUTAWAY" : "CLOSED");
+        } else if (open > 0) {
             if ("RECEIVED".equals(asn.getStatus())) {
                 asn.setStatus("PUTAWAY");
             }
@@ -279,6 +385,9 @@ public class AsnService {
     private void validate(Asn asn) {
         if (asn.getWarehouseCode() == null || asn.getOwnerCode() == null) {
             throw new BizException("仓库和货主不能为空");
+        }
+        if ("RETURN".equals(asn.getType()) && blankToNull(asn.getCustomerCode()) == null) {
+            throw new BizException("退货入库必须选择客户");
         }
         if (blankToNull(asn.getCrossDockOrderCode()) != null) {
             crossDockService.requireTarget(asn.getCrossDockOrderCode().trim(), asn.getWarehouseCode(), asn.getOwnerCode());
@@ -309,6 +418,7 @@ public class AsnService {
             l.setLineNo(no++);
             l.setReceivedQty(BigDecimal.ZERO);
             l.setPutawayQty(BigDecimal.ZERO);
+            l.setRejectedQty(BigDecimal.ZERO);
             lineMapper.insert(l);
         }
     }

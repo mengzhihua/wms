@@ -6,13 +6,16 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.wms.common.R;
 import com.wms.inbound.entity.Asn;
 import com.wms.inbound.entity.PutawayTask;
+import com.wms.inbound.entity.QcTask;
 import com.wms.inbound.mapper.AsnMapper;
 import com.wms.inbound.mapper.PutawayTaskMapper;
+import com.wms.inbound.mapper.QcTaskMapper;
 import com.wms.inbound.service.AsnService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @RestController
@@ -22,6 +25,7 @@ public class AsnController {
 
     private final AsnMapper asnMapper;
     private final PutawayTaskMapper taskMapper;
+    private final QcTaskMapper qcTaskMapper;
     private final AsnService asnService;
 
     @GetMapping("/asn/page")
@@ -94,5 +98,36 @@ public class AsnController {
     @PostMapping("/putaway/{taskId}/confirm")
     public R<PutawayTask> putaway(@PathVariable Long taskId, @RequestBody(required = false) PutawayReq req) {
         return R.ok(asnService.putaway(taskId, req == null ? null : req.getToLocation()));
+    }
+
+    // ------------------------------------------------------------------ QC
+
+    @GetMapping("/asn/{id}/qc-tasks")
+    public R<List<QcTask>> qcTasks(@PathVariable Long id) {
+        return R.ok(asnService.qcTasks(id, null));
+    }
+
+    @GetMapping("/qc/page")
+    public R<Page<QcTask>> qcPage(@RequestParam(defaultValue = "1") long current,
+                                  @RequestParam(defaultValue = "20") long size,
+                                  @RequestParam(required = false) String status,
+                                  @RequestParam(required = false) String keyword) {
+        QueryWrapper<QcTask> qw = new QueryWrapper<>();
+        qw.eq(StringUtils.isNotBlank(status), "status", status)
+                .and(StringUtils.isNotBlank(keyword), w -> w.like("code", keyword).or().like("asn_code", keyword).or().like("item_code", keyword))
+                .orderByDesc("id");
+        return R.ok(qcTaskMapper.selectPage(new Page<>(current, size), qw));
+    }
+
+    @Data
+    public static class QcReq {
+        private BigDecimal passQty;
+        private BigDecimal rejectQty;
+        private String rejectReason;
+    }
+
+    @PostMapping("/qc/{taskId}/inspect")
+    public R<QcTask> inspect(@PathVariable Long taskId, @RequestBody QcReq req) {
+        return R.ok(asnService.inspect(taskId, req.getPassQty(), req.getRejectQty(), req.getRejectReason()));
     }
 }

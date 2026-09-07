@@ -11,6 +11,7 @@
           <el-option value="AVAILABLE" label="可用" /><el-option value="FROZEN" label="冻结" />
         </el-select>
         <el-button type="primary" @click="load"><el-icon><Search /></el-icon>查询</el-button>
+        <el-button @click="downloadCsv('/inventory/export', query, 'inventory.csv')">导出 CSV</el-button>
       </div>
       <el-table :data="rows" v-loading="loading" border stripe size="small">
         <el-table-column prop="warehouseCode" label="仓库" width="80" />
@@ -68,7 +69,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { inventory } from '../../api'
+import { inventory, downloadCsv } from '../../api'
 import { useOptions } from '../../composables/useOptions'
 import StatusTag from '../../components/StatusTag.vue'
 

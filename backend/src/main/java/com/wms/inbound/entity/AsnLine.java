@@ -22,5 +22,6 @@ public class AsnLine extends BaseEntity {
     private BigDecimal expectedQty;
     private BigDecimal receivedQty;
     private BigDecimal putawayQty;
+    private BigDecimal rejectedQty;
     private String remark;
 }

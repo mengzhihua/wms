@@ -9,6 +9,8 @@ import com.wms.inventory.entity.Inventory;
 import com.wms.inventory.entity.InventoryTxn;
 import com.wms.inventory.mapper.InventoryMapper;
 import com.wms.inventory.mapper.InventoryTxnMapper;
+import com.wms.system.auth.CurrentUser;
+import com.wms.system.entity.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -372,7 +374,8 @@ public class InventoryService {
         t.setToLocation(to);
         t.setQty(qty);
         t.setRefNo(refNo);
-        t.setOperator("admin");
+        User u = CurrentUser.get();
+        t.setOperator(u != null ? u.getUsername() : "system");
         t.setRemark(remark);
         txnMapper.insert(t);
     }

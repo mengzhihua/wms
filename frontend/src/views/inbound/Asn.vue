@@ -48,6 +48,7 @@
         <el-form-item label="货主" required><el-select v-model="form.ownerCode" style="width: 180px" @change="form.lines = []"><el-option v-for="o in options.owner" :key="o.value" :label="o.label" :value="o.value" /></el-select></el-form-item>
         <el-form-item label="供应商"><el-select v-model="form.supplierCode" clearable style="width: 180px"><el-option v-for="o in options.supplier" :key="o.value" :label="o.label" :value="o.value" /></el-select></el-form-item>
         <el-form-item label="类型"><el-select v-model="form.type" style="width: 180px"><el-option label="采购入库" value="PURCHASE" /><el-option label="退货入库" value="RETURN" /><el-option label="调拨入库" value="TRANSFER" /></el-select></el-form-item>
+        <el-form-item v-if="form.type === 'RETURN'" label="退货客户" required><el-select v-model="form.customerCode" clearable style="width: 180px"><el-option v-for="o in options.customer" :key="o.value" :label="o.label" :value="o.value" /></el-select></el-form-item>
         <el-form-item label="预计到货"><el-date-picker v-model="form.expectedDate" type="date" value-format="YYYY-MM-DD" style="width: 180px" /></el-form-item>
         <el-form-item label="外部单号"><el-input v-model="form.externalNo" style="width: 180px" /></el-form-item>
         <el-form-item label="越库出库单"><el-input v-model="form.crossDockOrderCode" placeholder="填入出库单号后收货直接分拨" clearable style="width: 240px" /></el-form-item>
@@ -78,7 +79,7 @@
 
     <!-- 收货 -->
     <el-dialog v-model="receiveVisible" :title="`收货 - ${current.code}`" width="900px" destroy-on-close>
-      <el-alert type="info" :closable="false" style="margin-bottom: 8px">收货后库存进入收货暂存区并自动生成上架任务；批次管理物料必须填写批次号。</el-alert>
+      <el-alert type="info" :closable="false" style="margin-bottom: 8px">收货后库存进入收货暂存区并自动生成上架任务；批次管理物料必须填写批次号；序列号管理物料需逐一登记 SN；需质检物料和退货入库将进入质检位冻结，放行后才能上架。</el-alert>
       <el-table :data="receiveLines" size="small" border>
         <el-table-column prop="itemCode" label="物料" width="110" />
         <el-table-column prop="expectedQty" label="预期" width="70" />
@@ -91,6 +92,12 @@
             <el-select v-model="row.locationCode" clearable placeholder="默认收货暂存区" style="width: 100%">
               <el-option v-for="o in stagingLocations" :key="o.value" :label="o.label" :value="o.value" />
             </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="序列号" width="200">
+          <template #default="{ row }">
+            <el-input v-if="isSn(row.itemCode)" v-model="row.serialText" type="textarea" :rows="2" :placeholder="`每行一个 SN，共 ${row.qty} 个`" />
+            <span v-else class="muted">-</span>
           </template>
         </el-table-column>
       </el-table>
@@ -111,6 +118,9 @@
         <el-descriptions-item label="外部单号">{{ current.externalNo }}</el-descriptions-item>
         <el-descriptions-item label="越库出库单">{{ current.crossDockOrderCode || '-' }}</el-descriptions-item>
         <el-descriptions-item label="越库数量">{{ current.crossDockQty || 0 }}</el-descriptions-item>
+        <el-descriptions-item label="退货客户">{{ current.customerCode || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="待质检">{{ current.qcQty || 0 }}</el-descriptions-item>
+        <el-descriptions-item label="质检拒收">{{ current.rejectedQty || 0 }}</el-descriptions-item>
       </el-descriptions>
       <h4>明细</h4>
       <el-table :data="current.lines || []" size="small" border>
@@ -145,7 +155,7 @@ import { useOptions } from '../../composables/useOptions'
 import StatusTag from '../../components/StatusTag.vue'
 
 const STATUSES = ['NEW', 'RECEIVING', 'RECEIVED', 'PUTAWAY', 'CLOSED', 'CANCELLED']
-const { options } = useOptions(['warehouse', 'owner', 'supplier', 'item', 'location'])
+const { options } = useOptions(['warehouse', 'owner', 'supplier', 'customer', 'item', 'location'])
 
 const rows = ref([])
 const total = ref(0)
@@ -202,8 +212,16 @@ async function openReceive(row) {
   receiveVisible.value = true
 }
 
+function isSn(itemCode) {
+  const it = (options.value.item || []).find((i) => i.ownerCode === current.value.ownerCode && i.value === itemCode)
+  return !!(it && it.snControl)
+}
+
 async function doReceive() {
-  const lines = receiveLines.value.filter((l) => l.qty > 0)
+  const lines = receiveLines.value.filter((l) => l.qty > 0).map((l) => ({
+    ...l,
+    serialNos: (l.serialText || '').split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean)
+  }))
   if (!lines.length) return ElMessage.warning('请输入收货数量')
   saving.value = true
   try {

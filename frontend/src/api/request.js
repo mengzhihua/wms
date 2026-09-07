@@ -30,6 +30,7 @@ function toLogin() {
 http.interceptors.response.use(
   (res) => {
     const body = res.data
+    if (body instanceof Blob) return body
     if (body && body.code !== undefined && body.code !== 0) {
       ElMessage.error(body.msg || '请求失败')
       return reported(new Error(body.msg))

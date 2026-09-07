@@ -24,5 +24,9 @@ public class Item extends BaseEntity {
     private java.math.BigDecimal volume;
     private java.math.BigDecimal minStock;
     private java.math.BigDecimal maxStock;
+    /** 收货后需质检放行才能上架 */
+    private Boolean qcRequired;
+    /** 序列号管理：收货/发运必须逐一登记 SN */
+    private Boolean snControl;
     private Integer status;
 }

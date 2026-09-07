@@ -18,7 +18,8 @@ spring:
       continue-on-error: true
   h2:
     console:
-      enabled: true
+      # 仅开发排障时开启: WMS_H2_CONSOLE=true
+      enabled: ${WMS_H2_CONSOLE:false}
       path: /h2
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
@@ -37,6 +38,17 @@ mybatis-plus:
 logging:
   level:
     com.wms: info
+
+wms:
+  auth:
+    # 令牌签名密钥；生产必须设置，否则每次重启随机生成导致全员重新登录
+    secret: ${WMS_AUTH_SECRET:}
+    token-ttl: ${WMS_TOKEN_TTL:12h}
+    # 首次启动创建 admin 时使用的初始密码
+    admin-password: ${WMS_ADMIN_PASSWORD:admin123}
+  cors:
+    # 允许跨域的前端来源，逗号分隔；前后端同源部署时可设为空
+    origins: ${WMS_CORS_ORIGINS:http://localhost:5173}
 
 ---
 spring:

@@ -69,3 +69,14 @@ export const inventory = {
 }
 
 export const dashboard = () => http.get('/dashboard')
+
+export const authApi = {
+  login: (data) => http.post('/auth/login', data),
+  me: () => http.get('/auth/me'),
+  logout: () => http.post('/auth/logout'),
+  changePassword: (data) => http.post('/auth/password', data)
+}
+
+export const system = {
+  user: crud('/system/user')
+}

@@ -5,16 +5,22 @@
 set -euo pipefail
 BASE="${1:-http://localhost:8080}/api"
 J='Content-Type: application/json'
+USER="${WMS_USER:-admin}"; PASS="${WMS_PASS:-admin123}"
 
 need() { command -v "$1" >/dev/null || { echo "missing $1"; exit 1; }; }
 need curl; need jq
 
 call() { # method path [json]
   local out
-  out=$(curl -sf -X "$1" "$BASE$2" -H "$J" ${3:+-d "$3"})
+  out=$(curl -sf -X "$1" "$BASE$2" -H "$J" -H "Authorization: Bearer ${TOKEN:-}" ${3:+-d "$3"})
   [ "$(echo "$out" | jq -r .code)" = "0" ] || { echo "FAIL $1 $2 -> $out"; exit 1; }
   echo "$out" | jq -c .data
 }
+
+echo "== 0. login"
+curl -s -o /dev/null -w "%{http_code}" "$BASE/inventory/page" | grep -q 401 || { echo "FAIL: unauthenticated request not rejected"; exit 1; }
+TOKEN=$(call POST /auth/login "{\"username\":\"$USER\",\"password\":\"$PASS\"}" | jq -r .token)
+echo "login ok as $(call GET /auth/me | jq -r .username) role=$(call GET /auth/me | jq -r .role)"
 
 echo "== 1. create ASN"
 ASN=$(call POST /inbound/asn '{"warehouseCode":"WH01","ownerCode":"OWN01","supplierCode":"SUP01","type":"PURCHASE",

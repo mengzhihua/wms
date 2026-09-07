@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Layout from '../layout/Layout.vue'
+import { auth, isAdmin } from '../auth'
 
 export const menus = [
   { path: '/dashboard', name: '工作台', icon: 'Odometer', component: () => import('../views/Dashboard.vue') },
@@ -38,10 +39,20 @@ export const menus = [
       { path: 'count', name: '盘点管理', component: () => import('../views/inventory/Count.vue') },
       { path: 'txn', name: '库存流水', component: () => import('../views/inventory/Txn.vue') }
     ]
+  },
+  {
+    path: '/system', name: '系统管理', icon: 'Tools', adminOnly: true,
+    children: [
+      { path: 'user', name: '用户管理', component: () => import('../views/system/User.vue') }
+    ]
   }
 ]
 
+/** 当前用户可见菜单（adminOnly 菜单仅管理员可见；后端同样做了鉴权） */
+export const visibleMenus = () => menus.filter((m) => !m.adminOnly || isAdmin())
+
 const routes = [
+  { path: '/login', name: '登录', component: () => import('../views/Login.vue') },
   {
     path: '/',
     component: Layout,
@@ -54,4 +65,13 @@ const routes = [
   }
 ]
 
-export default createRouter({ history: createWebHistory(), routes })
+const router = createRouter({ history: createWebHistory(), routes })
+
+router.beforeEach((to) => {
+  if (to.path === '/login') return auth.token ? '/dashboard' : true
+  if (!auth.token) return { path: '/login', query: { redirect: to.fullPath } }
+  if (to.path.startsWith('/system') && !isAdmin()) return '/dashboard'
+  return true
+})
+
+export default router

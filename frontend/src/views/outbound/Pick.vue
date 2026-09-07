@@ -19,7 +19,7 @@
         <el-table-column prop="pickedQty" label="实拣" width="80" />
         <el-table-column label="状态" width="90"><template #default="{ row }"><StatusTag :value="row.status" /></template></el-table-column>
         <el-table-column prop="createdAt" label="创建时间" width="160"><template #default="{ row }">{{ fmt(row.createdAt) }}</template></el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column v-if="canWrite()" label="操作" width="120" fixed="right">
           <template #default="{ row }">
             <el-button v-if="row.status === 'NEW'" link type="primary" size="small" @click="open(row)">拣货确认</el-button>
           </template>
@@ -47,6 +47,7 @@
 
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
+import { canWrite } from '../../auth'
 import { ElMessage } from 'element-plus'
 import { outbound } from '../../api'
 import StatusTag from '../../components/StatusTag.vue'

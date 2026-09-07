@@ -7,7 +7,7 @@
           <el-option v-for="s in STATUSES" :key="s" :value="s"><StatusTag :value="s" /></el-option>
         </el-select>
         <el-button type="primary" @click="load"><el-icon><Search /></el-icon>查询</el-button>
-        <el-button type="success" @click="openCreate"><el-icon><Plus /></el-icon>创建波次</el-button>
+        <el-button v-if="canWrite()" type="success" @click="openCreate"><el-icon><Plus /></el-icon>创建波次</el-button>
       </div>
 
       <el-table :data="rows" v-loading="loading" border stripe size="small">
@@ -23,8 +23,8 @@
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="openDetail(row)">详情/作业</el-button>
-            <el-button v-if="row.status === 'SOWED'" link type="success" size="small" @click="ship(row)">发运</el-button>
-            <el-popconfirm v-if="row.status === 'NEW'" title="取消波次，拣货任务回到普通拣货池?" @confirm="cancel(row)">
+            <el-button v-if="canWrite() && row.status === 'SOWED'" link type="success" size="small" @click="ship(row)">发运</el-button>
+            <el-popconfirm v-if="canWrite() && row.status === 'NEW'" title="取消波次，拣货任务回到普通拣货池?" @confirm="cancel(row)">
               <template #reference><el-button link type="danger" size="small">取消</el-button></template>
             </el-popconfirm>
           </template>
@@ -158,6 +158,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { canWrite } from '../../auth'
 import { ElMessage } from 'element-plus'
 import { outbound } from '../../api'
 import StatusTag from '../../components/StatusTag.vue'

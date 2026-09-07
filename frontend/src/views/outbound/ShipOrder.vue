@@ -7,7 +7,7 @@
           <el-option v-for="s in STATUSES" :key="s" :value="s"><StatusTag :value="s" /></el-option>
         </el-select>
         <el-button type="primary" @click="load"><el-icon><Search /></el-icon>查询</el-button>
-        <el-button type="success" @click="openForm()"><el-icon><Plus /></el-icon>新建出库单</el-button>
+        <el-button v-if="canWrite()" type="success" @click="openForm()"><el-icon><Plus /></el-icon>新建出库单</el-button>
       </div>
 
       <el-table :data="rows" v-loading="loading" border stripe size="small">
@@ -28,12 +28,12 @@
         <el-table-column label="操作" width="320" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="openDetail(row)">详情</el-button>
-            <el-button v-if="row.status === 'NEW'" link type="primary" size="small" @click="openForm(row)">编辑</el-button>
-            <el-button v-if="['NEW', 'PART_ALLOCATED'].includes(row.status)" link type="success" size="small" @click="act(outbound.allocate, row, '分配完成')">分配</el-button>
-            <el-button v-if="['ALLOCATED', 'PART_ALLOCATED'].includes(row.status)" link type="warning" size="small" @click="act(outbound.deallocate, row, '已取消分配')">取消分配</el-button>
-            <el-button v-if="row.status === 'PICKED'" link type="primary" size="small" @click="openPack(row)">复核打包</el-button>
-            <el-button v-if="['PICKED', 'PACKED'].includes(row.status)" link type="success" size="small" @click="openShip(row)">发运</el-button>
-            <el-popconfirm v-if="['NEW', 'ALLOCATED', 'PART_ALLOCATED'].includes(row.status)" title="确认取消该出库单?" @confirm="act(outbound.cancel, row, '已取消')">
+            <el-button v-if="canWrite() && row.status === 'NEW'" link type="primary" size="small" @click="openForm(row)">编辑</el-button>
+            <el-button v-if="canWrite() && ['NEW', 'PART_ALLOCATED'].includes(row.status)" link type="success" size="small" @click="act(outbound.allocate, row, '分配完成')">分配</el-button>
+            <el-button v-if="canWrite() && ['ALLOCATED', 'PART_ALLOCATED'].includes(row.status)" link type="warning" size="small" @click="act(outbound.deallocate, row, '已取消分配')">取消分配</el-button>
+            <el-button v-if="canWrite() && row.status === 'PICKED'" link type="primary" size="small" @click="openPack(row)">复核打包</el-button>
+            <el-button v-if="canWrite() && ['PICKED', 'PACKED'].includes(row.status)" link type="success" size="small" @click="openShip(row)">发运</el-button>
+            <el-popconfirm v-if="canWrite() && ['NEW', 'ALLOCATED', 'PART_ALLOCATED'].includes(row.status)" title="确认取消该出库单?" @confirm="act(outbound.cancel, row, '已取消')">
               <template #reference><el-button link type="danger" size="small">取消</el-button></template>
             </el-popconfirm>
           </template>
@@ -161,6 +161,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { canWrite } from '../../auth'
 import { ElMessage } from 'element-plus'
 import { outbound } from '../../api'
 import { useOptions } from '../../composables/useOptions'

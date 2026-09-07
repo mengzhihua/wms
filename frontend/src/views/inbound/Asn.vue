@@ -7,7 +7,7 @@
           <el-option v-for="s in STATUSES" :key="s" :value="s"><StatusTag :value="s" /></el-option>
         </el-select>
         <el-button type="primary" @click="load"><el-icon><Search /></el-icon>查询</el-button>
-        <el-button type="success" @click="openForm()"><el-icon><Plus /></el-icon>新建入库单</el-button>
+        <el-button v-if="canWrite()" type="success" @click="openForm()"><el-icon><Plus /></el-icon>新建入库单</el-button>
       </div>
 
       <el-table :data="rows" v-loading="loading" border stripe size="small">
@@ -27,10 +27,10 @@
         <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="openDetail(row)">详情</el-button>
-            <el-button v-if="row.status === 'NEW'" link type="primary" size="small" @click="openForm(row)">编辑</el-button>
-            <el-button v-if="['NEW', 'RECEIVING'].includes(row.status)" link type="success" size="small" @click="openReceive(row)">收货</el-button>
-            <el-button v-if="row.status === 'RECEIVING'" link type="warning" size="small" @click="closeReceiving(row)">关闭收货</el-button>
-            <el-popconfirm v-if="row.status === 'NEW'" title="确认取消该入库单?" @confirm="cancel(row)">
+            <el-button v-if="canWrite() && row.status === 'NEW'" link type="primary" size="small" @click="openForm(row)">编辑</el-button>
+            <el-button v-if="canWrite() && ['NEW', 'RECEIVING'].includes(row.status)" link type="success" size="small" @click="openReceive(row)">收货</el-button>
+            <el-button v-if="canWrite() && row.status === 'RECEIVING'" link type="warning" size="small" @click="closeReceiving(row)">关闭收货</el-button>
+            <el-popconfirm v-if="canWrite() && row.status === 'NEW'" title="确认取消该入库单?" @confirm="cancel(row)">
               <template #reference><el-button link type="danger" size="small">取消</el-button></template>
             </el-popconfirm>
           </template>
@@ -149,6 +149,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { canWrite } from '../../auth'
 import { ElMessage } from 'element-plus'
 import { inbound } from '../../api'
 import { useOptions } from '../../composables/useOptions'

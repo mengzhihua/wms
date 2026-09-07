@@ -7,8 +7,10 @@ import com.wms.basic.mapper.LocationMapper;
 import com.wms.common.BizException;
 import com.wms.inventory.entity.Inventory;
 import com.wms.inventory.entity.InventoryTxn;
+import com.wms.inventory.entity.Serial;
 import com.wms.inventory.mapper.InventoryMapper;
 import com.wms.inventory.mapper.InventoryTxnMapper;
+import com.wms.inventory.mapper.SerialMapper;
 import com.wms.system.auth.CurrentUser;
 import com.wms.system.entity.User;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +37,7 @@ public class InventoryService {
     private final InventoryMapper inventoryMapper;
     private final InventoryTxnMapper txnMapper;
     private final LocationMapper locationMapper;
+    private final SerialMapper serialMapper;
 
     // ------------------------------------------------------------------ basic movements
 
@@ -143,7 +146,30 @@ public class InventoryService {
             inventoryMapper.updateById(dst);
         }
         txn(txnType, dst, src.getLocationCode(), toLocation, qty, refNo, null);
+        relocateSerials(src, toLocation, qty);
         return dst;
+    }
+
+    /** 库存移动后同步序列号所在库位；未逐一扫描的移库按登记顺序取前 qty 个 */
+    private void relocateSerials(Inventory src, String toLocation, BigDecimal qty) {
+        List<Serial> serials = serialMapper.selectList(new LambdaQueryWrapper<Serial>()
+                .eq(Serial::getOwnerCode, src.getOwnerCode())
+                .eq(Serial::getItemCode, src.getItemCode())
+                .eq(Serial::getLocationCode, src.getLocationCode())
+                .eq(Serial::getStatus, "IN_STOCK")
+                .and(w -> {
+                    if (src.getLotNo() == null || src.getLotNo().isEmpty()) {
+                        w.isNull(Serial::getLotNo).or().eq(Serial::getLotNo, "");
+                    } else {
+                        w.eq(Serial::getLotNo, src.getLotNo());
+                    }
+                })
+                .orderByAsc(Serial::getId)
+                .last("limit " + qty.intValue()));
+        for (Serial s : serials) {
+            s.setLocationCode(toLocation);
+            serialMapper.updateById(s);
+        }
     }
 
     /** 库存调整 (盘盈/盘亏/损益) */

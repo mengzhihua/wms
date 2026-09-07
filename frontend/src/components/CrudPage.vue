@@ -11,7 +11,7 @@
           </el-select>
         </template>
         <el-button type="primary" @click="load"><el-icon><Search /></el-icon>查询</el-button>
-        <el-button type="success" @click="openForm()"><el-icon><Plus /></el-icon>新增{{ title }}</el-button>
+        <el-button v-if="editable" type="success" @click="openForm()"><el-icon><Plus /></el-icon>新增{{ title }}</el-button>
         <slot name="toolbar" />
       </div>
 
@@ -28,7 +28,7 @@
             <template v-else>{{ row[c.prop] }}</template>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="140" fixed="right">
+        <el-table-column v-if="editable" label="操作" width="140" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="openForm(row)">编辑</el-button>
             <el-popconfirm title="确认删除?" @confirm="remove(row)">
@@ -71,6 +71,8 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useRoute } from 'vue-router'
+import { canEditMaster, canWrite } from '../auth'
 
 const props = defineProps({
   title: { type: String, required: true },
@@ -83,6 +85,8 @@ const props = defineProps({
 const rows = ref([])
 const total = ref(0)
 const loading = ref(false)
+const route = useRoute()
+const editable = computed(() => (route.path.startsWith('/basic') || route.path.startsWith('/system') ? canEditMaster() : canWrite()))
 const saving = ref(false)
 const visible = ref(false)
 const formRef = ref()

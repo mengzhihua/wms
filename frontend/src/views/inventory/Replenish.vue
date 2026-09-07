@@ -7,8 +7,8 @@
           <el-option value="NEW" label="待补货" /><el-option value="DONE" label="已完成" /><el-option value="CANCELLED" label="已取消" />
         </el-select>
         <el-button type="primary" @click="load"><el-icon><Search /></el-icon>查询</el-button>
-        <el-button type="success" @click="genVisible = true"><el-icon><MagicStick /></el-icon>Min/Max 自动生成</el-button>
-        <el-button @click="openManual"><el-icon><Plus /></el-icon>手工补货</el-button>
+        <el-button v-if="canWrite()" type="success" @click="genVisible = true"><el-icon><MagicStick /></el-icon>Min/Max 自动生成</el-button>
+        <el-button v-if="canWrite()" @click="openManual"><el-icon><Plus /></el-icon>手工补货</el-button>
       </div>
       <el-alert type="info" :closable="false" style="margin-bottom: 8px">拣货位现有量 + 在途补货 低于物料安全库存时，从存储位按 FEFO 生成补货任务，补到最大库存（未设置时为 2 倍安全库存）。</el-alert>
       <el-table :data="rows" v-loading="loading" border stripe size="small">
@@ -21,7 +21,7 @@
         <el-table-column prop="remark" label="备注" min-width="160" />
         <el-table-column label="状态" width="90"><template #default="{ row }"><StatusTag :value="row.status" /></template></el-table-column>
         <el-table-column prop="createdAt" label="创建时间" width="160"><template #default="{ row }">{{ fmt(row.createdAt) }}</template></el-table-column>
-        <el-table-column label="操作" width="140" fixed="right">
+        <el-table-column v-if="canWrite()" label="操作" width="140" fixed="right">
           <template #default="{ row }">
             <template v-if="row.status === 'NEW'">
               <el-button link type="primary" size="small" @click="openConfirm(row)">补货确认</el-button>
@@ -74,6 +74,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { canWrite } from '../../auth'
 import { ElMessage } from 'element-plus'
 import { inventory } from '../../api'
 import { useOptions } from '../../composables/useOptions'

@@ -122,11 +122,15 @@ class SerialCartonAbcFlowTest {
         assertEquals("PUTAWAY", asn.getStatus());
         assertEquals("IN_STOCK", sn("IMEI-1").getStatus());
         assertEquals(asn.getCode(), sn("IMEI-1").getAsnCode());
+        assertEquals("RCV-01", sn("IMEI-1").getLocationCode());
 
         // 同一 SN 不能重复收货
         Asn again = newAsn("SKU005", 1);
         assertThrows(BizException.class, () -> receive(again, 1, Collections.singletonList("IMEI-2")));
         putawayAll(asn.getId());
+        // 上架后 SN 跟随库存移动到存储位
+        assertNotEquals("RCV-01", sn("IMEI-1").getLocationCode());
+        assertEquals(sn("IMEI-1").getLocationCode(), sn("IMEI-3").getLocationCode());
 
         ShipOrder o = pickedOrder("SKU005", 2);
         Long orderId = o.getId();

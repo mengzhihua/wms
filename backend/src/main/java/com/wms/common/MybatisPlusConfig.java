@@ -31,7 +31,7 @@ public class MybatisPlusConfig {
 
             @Override
             public void updateFill(MetaObject metaObject) {
-                strictUpdateFill(metaObject, "updatedAt", LocalDateTime.class, LocalDateTime.now());
+                setFieldValByName("updatedAt", LocalDateTime.now(), metaObject);
             }
         };
     }

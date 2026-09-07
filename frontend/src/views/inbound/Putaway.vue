@@ -19,7 +19,7 @@
         <el-table-column prop="toLocation" label="实际库位" width="120" />
         <el-table-column label="状态" width="90"><template #default="{ row }"><StatusTag :value="row.status" /></template></el-table-column>
         <el-table-column prop="createdAt" label="创建时间" width="160"><template #default="{ row }">{{ fmt(row.createdAt) }}</template></el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column v-if="canWrite()" label="操作" width="120" fixed="right">
           <template #default="{ row }">
             <el-button v-if="row.status === 'NEW'" link type="primary" size="small" @click="open(row)">上架确认</el-button>
           </template>
@@ -50,6 +50,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { canWrite } from '../../auth'
 import { ElMessage } from 'element-plus'
 import { inbound } from '../../api'
 import { useOptions } from '../../composables/useOptions'

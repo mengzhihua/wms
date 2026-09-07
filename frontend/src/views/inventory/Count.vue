@@ -7,7 +7,7 @@
           <el-option v-for="s in STATUSES" :key="s" :value="s"><StatusTag :value="s" /></el-option>
         </el-select>
         <el-button type="primary" @click="load"><el-icon><Search /></el-icon>查询</el-button>
-        <el-button type="success" @click="formVisible = true"><el-icon><Plus /></el-icon>新建盘点</el-button>
+        <el-button v-if="canWrite()" type="success" @click="formVisible = true"><el-icon><Plus /></el-icon>新建盘点</el-button>
       </div>
       <el-table :data="rows" v-loading="loading" border stripe size="small">
         <el-table-column prop="code" label="盘点单号" width="190" />
@@ -21,8 +21,8 @@
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="openLines(row)">{{ ['NEW', 'COUNTING'].includes(row.status) ? '录入盘点' : '查看' }}</el-button>
-            <el-button v-if="row.status === 'COUNTED'" link type="success" size="small" @click="post(row)">过账</el-button>
-            <el-popconfirm v-if="['NEW', 'COUNTING', 'COUNTED'].includes(row.status)" title="确认取消该盘点单?" @confirm="cancel(row)">
+            <el-button v-if="canWrite() && row.status === 'COUNTED'" link type="success" size="small" @click="post(row)">过账</el-button>
+            <el-popconfirm v-if="canWrite() && ['NEW', 'COUNTING', 'COUNTED'].includes(row.status)" title="确认取消该盘点单?" @confirm="cancel(row)">
               <template #reference><el-button link type="danger" size="small">取消</el-button></template>
             </el-popconfirm>
           </template>
@@ -76,6 +76,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { canWrite } from '../../auth'
 import { ElMessage } from 'element-plus'
 import { inventory } from '../../api'
 import { useOptions } from '../../composables/useOptions'

@@ -5,6 +5,7 @@ import com.wms.common.R;
 import com.wms.system.entity.User;
 import com.wms.system.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -13,20 +14,36 @@ import org.springframework.web.servlet.HandlerInterceptor;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 
 /** 校验 Authorization: Bearer 令牌，并按 {@link AccessPolicy} 做角色鉴权 */
 @Component
 @RequiredArgsConstructor
 public class AuthInterceptor implements HandlerInterceptor {
     public static final String LOGIN_PATH = "/api/auth/login";
+    public static final String OPEN_PREFIX = "/api/open/";
+    public static final String API_KEY_HEADER = "X-Api-Key";
 
     private final TokenService tokenService;
     private final UserMapper userMapper;
     private final ObjectMapper objectMapper;
 
+    @Value("${wms.open.api-key:}")
+    private String openApiKey;
+
     @Override
     public boolean preHandle(HttpServletRequest req, HttpServletResponse res, Object handler) throws IOException {
         if ("OPTIONS".equalsIgnoreCase(req.getMethod()) || LOGIN_PATH.equals(req.getRequestURI())) {
+            return true;
+        }
+        if (req.getRequestURI().startsWith(OPEN_PREFIX)) {
+            String given = req.getHeader(API_KEY_HEADER);
+            if (openApiKey == null || openApiKey.isEmpty() || given == null
+                    || !MessageDigest.isEqual(given.getBytes(StandardCharsets.UTF_8),
+                    openApiKey.getBytes(StandardCharsets.UTF_8))) {
+                return reject(res, HttpStatus.UNAUTHORIZED, "开放接口 X-Api-Key 无效");
+            }
             return true;
         }
         TokenService.Principal principal = tokenService.parse(bearer(req.getHeader("Authorization")));

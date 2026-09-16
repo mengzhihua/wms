@@ -5,3 +5,5 @@ wms:
   auth:
     secret: test-secret-for-unit-tests
     admin-password: admin123
+  open:
+    api-key: test-open-key

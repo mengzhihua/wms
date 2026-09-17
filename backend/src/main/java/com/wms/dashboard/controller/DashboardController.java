@@ -1,9 +1,10 @@
-package com.wms.common;
+package com.wms.dashboard.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.wms.basic.entity.Item;
 import com.wms.basic.entity.Location;
+import com.wms.common.R;
 import com.wms.basic.mapper.ItemMapper;
 import com.wms.basic.mapper.LocationMapper;
 import com.wms.inbound.entity.Asn;

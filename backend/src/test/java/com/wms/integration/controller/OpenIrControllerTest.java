@@ -1,4 +1,4 @@
-package com.wms.integration;
+package com.wms.integration.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

@@ -1,4 +1,4 @@
-package com.wms.integration;
+package com.wms.integration.controller;
 
 import com.wms.common.BizException;
 import com.wms.common.R;

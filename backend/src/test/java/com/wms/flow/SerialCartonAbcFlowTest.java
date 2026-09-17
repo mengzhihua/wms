@@ -19,7 +19,7 @@ import com.wms.outbound.entity.PickTask;
 import com.wms.outbound.entity.ShipOrder;
 import com.wms.outbound.entity.ShipOrderLine;
 import com.wms.outbound.service.ShipOrderService;
-import com.wms.report.ReportController;
+import com.wms.report.controller.ReportController;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;

@@ -100,6 +100,28 @@ public class ShipOrderService {
         return o;
     }
 
+    public ShipOrder findByCodeOrExternal(String key) {
+        if (key == null || key.trim().isEmpty()) {
+            return null;
+        }
+        ShipOrder order = orderMapper.selectOne(new LambdaQueryWrapper<ShipOrder>()
+                .eq(ShipOrder::getCode, key.trim()).last("LIMIT 1"));
+        if (order != null) {
+            return load(order.getId());
+        }
+        return orderMapper.selectOne(new LambdaQueryWrapper<ShipOrder>()
+                .eq(ShipOrder::getExternalNo, key.trim()).last("LIMIT 1"));
+    }
+
+    @Transactional
+    public ShipOrder allocateByKey(String key) {
+        ShipOrder order = findByCodeOrExternal(key);
+        if (order == null) {
+            throw new BizException("出库单不存在: " + key);
+        }
+        return allocate(order.getId());
+    }
+
     public List<PickTask> tasks(Long orderId) {
         return taskMapper.selectList(new LambdaQueryWrapper<PickTask>()
                 .eq(PickTask::getOrderId, orderId).orderByAsc(PickTask::getFromLocation));

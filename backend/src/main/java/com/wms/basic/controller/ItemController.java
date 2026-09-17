@@ -7,7 +7,7 @@ import com.wms.common.BaseCrudController;
 import com.wms.common.BizException;
 import com.wms.common.Csv;
 import com.wms.common.R;
-import com.wms.report.ReportController;
+import com.wms.report.controller.ReportController;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;

@@ -71,3 +71,20 @@ INSERT INTO wms_carton (code, name, length_cm, width_cm, height_cm, volume, max_
 SELECT 'BOX-M', '中号纸箱', 40, 30, 25, 0.03, 15, 'OWN01', 'PKG-BOX-M', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wms_carton WHERE code='BOX-M');
 INSERT INTO wms_carton (code, name, length_cm, width_cm, height_cm, volume, max_weight, status, created_at, updated_at)
 SELECT 'BOX-L', '大号纸箱', 60, 40, 40, 0.096, 30, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wms_carton WHERE code='BOX-L');
+
+-- IR HTTP 联调：库存放在存储位，避免占满拣货位导致 Min/Max 补货单测不触发
+INSERT INTO wms_inventory (warehouse_code, location_code, owner_code, item_code, lot_no, qty, allocated_qty, status, created_at, updated_at)
+SELECT 'WH01', 'A-01-01-01', 'OWN01', 'SKU001', 'LOT-IR', 200, 0, 'AVAILABLE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wms_inventory WHERE warehouse_code='WH01' AND location_code='A-01-01-01' AND item_code='SKU001' AND lot_no='LOT-IR');
+
+INSERT INTO wms_ship_order (code, warehouse_code, owner_code, customer_code, type, status, priority, expected_ship_date,
+    external_no, carrier, address, total_qty, allocated_qty, picked_qty, shipped_qty, created_at, updated_at)
+SELECT 'SO-IR-STUCK', 'WH01', 'OWN01', 'CUS01', 'SALES', 'NEW', 10, CURRENT_DATE,
+    'IR-SO-STUCK', 'SF', 'IR 演示出库卡单', 2, 0, 0, 0,
+    TIMESTAMPADD(HOUR, -10, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wms_ship_order WHERE code='SO-IR-STUCK');
+
+INSERT INTO wms_ship_order_line (order_id, line_no, item_code, order_qty, allocated_qty, picked_qty, shipped_qty, created_at, updated_at)
+SELECT id, 1, 'SKU001', 2, 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+FROM wms_ship_order WHERE code='SO-IR-STUCK'
+  AND NOT EXISTS (SELECT 1 FROM wms_ship_order_line WHERE order_id=wms_ship_order.id);

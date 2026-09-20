@@ -243,4 +243,20 @@ class CountPlanFlowTest {
         assertEquals(1, planService.generateTasks(p.getId()).getTaskCount());
         planService.cancel(p.getId());
     }
+
+    /** 冻结期间同键入库产生的可用行, 解冻时并回一条 */
+    @Test
+    void unfreezeMergesIntoSameKeyAvailableRow() {
+        Inventory frozen = inventoryService.add("WH01", "RCV-01", "OWN01", "TCP01", "LOT-UF", q(10), null, "", "RECEIVE", null);
+        inventoryService.setFrozen(frozen.getId(), true, "test");
+        Inventory twin = inventoryService.add("WH01", "RCV-01", "OWN01", "TCP01", "LOT-UF", q(5), null, "", "RECEIVE", null);
+        assertNotEquals(frozen.getId(), twin.getId());
+        Inventory merged = inventoryService.setFrozen(frozen.getId(), false, "test");
+        assertEquals(twin.getId(), merged.getId());
+        assertEquals(0, q(15).compareTo(merged.getQty()));
+        assertNull(inventoryMapper.selectById(frozen.getId()));
+        assertEquals(1, inventoryMapper.selectCount(new LambdaQueryWrapper<Inventory>()
+                .eq(Inventory::getLocationCode, "RCV-01").eq(Inventory::getItemCode, "TCP01").eq(Inventory::getLotNo, "LOT-UF")));
+        inventoryService.deduct(merged.getId(), q(15), false, "T", "ADJUST");
+    }
 }

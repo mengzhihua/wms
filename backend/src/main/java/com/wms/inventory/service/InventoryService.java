@@ -142,7 +142,7 @@ public class InventoryService {
         if (toLocation.equals(src.getLocationCode())) {
             throw new BizException("目标库位与源库位相同");
         }
-        Location target = requireLocation(src.getWarehouseCode(), toLocation);
+        Location target = lockLocation(src.getWarehouseCode(), toLocation);
         checkMixRules(target, src);
 
         src.setQty(src.getQty().subtract(qty));
@@ -219,10 +219,43 @@ public class InventoryService {
         if (target.equals(inv.getStatus())) {
             return inv;
         }
+        if (!frozen && !Boolean.TRUE.equals(inv.getCountLock())) {
+            lockLocation(inv.getWarehouseCode(), inv.getLocationCode());
+            Inventory twin = findMergeTarget(inv);
+            if (twin != null) {
+                twin.setQty(twin.getQty().add(inv.getQty()));
+                twin.setAllocatedQty(nz(twin.getAllocatedQty()).add(nz(inv.getAllocatedQty())));
+                if (inv.getReceiveDate() != null
+                        && (twin.getReceiveDate() == null || inv.getReceiveDate().isBefore(twin.getReceiveDate()))) {
+                    twin.setReceiveDate(inv.getReceiveDate());
+                }
+                inventoryMapper.updateById(twin);
+                inventoryMapper.deleteById(inv.getId());
+                txn("UNFREEZE", twin, inv.getLocationCode(), inv.getLocationCode(), inv.getQty(), null, reason);
+                return twin;
+            }
+        }
         inv.setStatus(target);
         inventoryMapper.updateById(inv);
         txn(frozen ? "FREEZE" : "UNFREEZE", inv, inv.getLocationCode(), inv.getLocationCode(), inv.getQty(), null, reason);
         return inv;
+    }
+
+    /** 解冻时查找同合并键(库位/货主/物料/批次/效期/引用号)的另一条可用未锁定记录, 需已持有库位行锁 */
+    private Inventory findMergeTarget(Inventory inv) {
+        return inventoryMapper.selectOne(new LambdaQueryWrapper<Inventory>()
+                .ne(Inventory::getId, inv.getId())
+                .eq(Inventory::getWarehouseCode, inv.getWarehouseCode())
+                .eq(Inventory::getLocationCode, inv.getLocationCode())
+                .eq(Inventory::getOwnerCode, inv.getOwnerCode())
+                .eq(Inventory::getItemCode, inv.getItemCode())
+                .eq(Inventory::getLotNo, inv.getLotNo() == null ? "" : inv.getLotNo())
+                .eq(Inventory::getRefNo, inv.getRefNo() == null ? "" : inv.getRefNo())
+                .eq(Inventory::getStatus, AVAILABLE)
+                .and(w -> w.isNull(Inventory::getCountLock).or().eq(Inventory::getCountLock, false))
+                .eq(inv.getExpiryDate() != null, Inventory::getExpiryDate, inv.getExpiryDate())
+                .isNull(inv.getExpiryDate() == null, Inventory::getExpiryDate)
+                .last("LIMIT 1 FOR UPDATE"));
     }
 
     // ------------------------------------------------------------------ allocation

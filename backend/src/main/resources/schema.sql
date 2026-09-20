@@ -480,3 +480,200 @@ ALTER TABLE wms_ship_order ADD COLUMN packed_at TIMESTAMP;
 ALTER TABLE wms_ship_order ADD COLUMN shipped_at TIMESTAMP;
 ALTER TABLE wms_ship_order ADD COLUMN carton_code VARCHAR(32);
 ALTER TABLE wms_item ADD COLUMN sn_control BOOLEAN DEFAULT FALSE;
+ALTER TABLE wms_inventory ADD COLUMN count_lock BOOLEAN DEFAULT FALSE;
+ALTER TABLE wms_inventory ADD COLUMN count_plan_id BIGINT;
+ALTER TABLE wms_wave ADD COLUMN strategy_id BIGINT;
+ALTER TABLE wms_wave ADD COLUMN strategy_code VARCHAR(32);
+ALTER TABLE wms_wave ADD COLUMN pack_strategy VARCHAR(32);
+ALTER TABLE wms_pick_task ADD COLUMN short_qty DECIMAL(18,3) DEFAULT 0;
+
+-- ===================== 盘点计划体系 =====================
+-- 盘点计划: DRAFT -> PENDING -> APPROVED -> EXECUTING -> COMPLETED / CANCELLED
+CREATE TABLE IF NOT EXISTS wms_count_plan (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  code VARCHAR(32) NOT NULL,
+  name VARCHAR(128),
+  warehouse_code VARCHAR(32) NOT NULL,
+  type VARCHAR(16) NOT NULL,
+  scope_type VARCHAR(16) NOT NULL,
+  zone_code VARCHAR(32),
+  item_codes VARCHAR(1024),
+  abc_classes VARCHAR(16),
+  since_date DATE,
+  sample_percent INT,
+  status VARCHAR(16) NOT NULL,
+  approver VARCHAR(64),
+  approve_opinion VARCHAR(255),
+  task_count INT DEFAULT 0,
+  done_count INT DEFAULT 0,
+  diff_count INT DEFAULT 0,
+  remark VARCHAR(255),
+  created_by VARCHAR(64),
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP,
+  CONSTRAINT uk_count_plan_code UNIQUE (code)
+);
+
+-- 盘点任务: 一条库存一条任务 PENDING(待领取) -> CLAIMED -> DONE / CANCELLED
+CREATE TABLE IF NOT EXISTS wms_count_task (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  plan_id BIGINT NOT NULL,
+  plan_code VARCHAR(32),
+  inventory_id BIGINT NOT NULL,
+  warehouse_code VARCHAR(32),
+  location_code VARCHAR(32),
+  owner_code VARCHAR(32),
+  item_code VARCHAR(64),
+  lot_no VARCHAR(64),
+  system_qty DECIMAL(18,3),
+  count_qty DECIMAL(18,3),
+  diff_qty DECIMAL(18,3),
+  assignee VARCHAR(64),
+  status VARCHAR(16) NOT NULL,
+  counted_at TIMESTAMP,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP,
+  INDEX idx_count_task_plan (plan_id)
+);
+
+-- 复盘任务(轮次): PENDING -> RECOUNTED -> CONFIRMED
+CREATE TABLE IF NOT EXISTS wms_recount_task (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  plan_id BIGINT NOT NULL,
+  round_no INT NOT NULL,
+  count_task_id BIGINT NOT NULL,
+  inventory_id BIGINT NOT NULL,
+  location_code VARCHAR(32),
+  owner_code VARCHAR(32),
+  item_code VARCHAR(64),
+  lot_no VARCHAR(64),
+  system_qty DECIMAL(18,3),
+  first_qty DECIMAL(18,3),
+  recount_qty DECIMAL(18,3),
+  recount_diff DECIMAL(18,3),
+  final_qty DECIMAL(18,3),
+  final_diff DECIMAL(18,3),
+  final_result VARCHAR(16),
+  assignee VARCHAR(64),
+  status VARCHAR(16) NOT NULL,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP,
+  INDEX idx_recount_plan (plan_id)
+);
+
+-- 库存调整单: PENDING -> APPROVED / REJECTED
+CREATE TABLE IF NOT EXISTS wms_stock_adjust (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  code VARCHAR(32) NOT NULL,
+  plan_id BIGINT,
+  plan_code VARCHAR(32),
+  warehouse_code VARCHAR(32) NOT NULL,
+  source VARCHAR(16) NOT NULL,
+  status VARCHAR(16) NOT NULL,
+  line_count INT DEFAULT 0,
+  gain_qty DECIMAL(18,3) DEFAULT 0,
+  loss_qty DECIMAL(18,3) DEFAULT 0,
+  approver VARCHAR(64),
+  approve_opinion VARCHAR(255),
+  remark VARCHAR(255),
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP,
+  CONSTRAINT uk_stock_adjust_code UNIQUE (code)
+);
+
+CREATE TABLE IF NOT EXISTS wms_stock_adjust_line (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  adjust_id BIGINT NOT NULL,
+  inventory_id BIGINT NOT NULL,
+  location_code VARCHAR(32),
+  owner_code VARCHAR(32),
+  item_code VARCHAR(64),
+  lot_no VARCHAR(64),
+  from_qty DECIMAL(18,3),
+  to_qty DECIMAL(18,3),
+  diff_qty DECIMAL(18,3),
+  reason VARCHAR(255),
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP,
+  INDEX idx_adjust_line (adjust_id)
+);
+
+-- ===================== 波次策略 / 缺货 / 包裹 =====================
+CREATE TABLE IF NOT EXISTS wms_wave_strategy (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  code VARCHAR(32) NOT NULL,
+  name VARCHAR(64) NOT NULL,
+  priority INT NOT NULL DEFAULT 100,
+  min_orders INT DEFAULT 1,
+  max_orders INT DEFAULT 100,
+  min_sku_per_order INT DEFAULT 0,
+  max_sku_per_order INT DEFAULT 0,
+  min_qty_per_order DECIMAL(18,3) DEFAULT 0,
+  max_qty_per_order DECIMAL(18,3) DEFAULT 0,
+  max_sku_items INT DEFAULT 0,
+  max_total_qty DECIMAL(18,3) DEFAULT 0,
+  group_by_item BOOLEAN DEFAULT FALSE,
+  group_by_owner BOOLEAN DEFAULT FALSE,
+  group_by_carrier BOOLEAN DEFAULT FALSE,
+  zone_code VARCHAR(32),
+  cutoff_hour INT,
+  pack_strategy VARCHAR(32) DEFAULT 'ONE_ORDER_ONE_PACKAGE',
+  max_package_weight DECIMAL(18,3),
+  enabled BOOLEAN DEFAULT TRUE,
+  remark VARCHAR(255),
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP,
+  CONSTRAINT uk_wave_strategy_code UNIQUE (code)
+);
+
+-- 缺货登记
+CREATE TABLE IF NOT EXISTS wms_shortage (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  task_id BIGINT NOT NULL,
+  order_id BIGINT NOT NULL,
+  order_code VARCHAR(32),
+  wave_id BIGINT,
+  warehouse_code VARCHAR(32),
+  owner_code VARCHAR(32),
+  item_code VARCHAR(64),
+  lot_no VARCHAR(64),
+  location_code VARCHAR(32),
+  inventory_id BIGINT,
+  qty DECIMAL(18,3) NOT NULL,
+  reason VARCHAR(255),
+  operator VARCHAR(64),
+  status VARCHAR(16) NOT NULL,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP
+);
+
+-- 包裹: NEW -> PACKED -> SHIPPED / CANCELLED
+CREATE TABLE IF NOT EXISTS wms_package (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  code VARCHAR(32) NOT NULL,
+  order_id BIGINT NOT NULL,
+  order_code VARCHAR(32),
+  wave_id BIGINT,
+  seq_no INT,
+  type VARCHAR(32),
+  carton_code VARCHAR(32),
+  weight DECIMAL(18,3),
+  carrier VARCHAR(64),
+  tracking_no VARCHAR(64),
+  status VARCHAR(16) NOT NULL,
+  remark VARCHAR(255),
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP,
+  CONSTRAINT uk_package_code UNIQUE (code)
+);
+
+CREATE TABLE IF NOT EXISTS wms_package_line (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  package_id BIGINT NOT NULL,
+  item_code VARCHAR(64) NOT NULL,
+  lot_no VARCHAR(64),
+  qty DECIMAL(18,3) NOT NULL,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP,
+  INDEX idx_package_line (package_id)
+);

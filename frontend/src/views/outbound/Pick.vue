@@ -36,10 +36,16 @@
         <el-form-item label="拣货库位">{{ current.fromLocation }} → {{ current.toLocation }}</el-form-item>
         <el-form-item label="实拣数量"><el-input-number v-model="qty" :min="0" :max="current.qty" style="width: 100%" /></el-form-item>
       </el-form>
-      <el-alert v-if="qty < current.qty" type="warning" :closable="false">少拣 {{ current.qty - qty }}，差异数量将释放分配。</el-alert>
+      <template v-if="qty < current.qty">
+        <el-alert type="warning" :closable="false">少拣 {{ current.qty - qty }}，差异数量将释放分配。</el-alert>
+        <el-form label-width="90px" style="margin-top: 10px">
+          <el-form-item label="登记缺货"><el-switch v-model="registerShort" /></el-form-item>
+          <el-form-item v-if="registerShort" label="缺货原因"><el-input v-model="shortReason" placeholder="库位无货 / 货损 / 找不到" /></el-form-item>
+        </el-form>
+      </template>
       <template #footer>
         <el-button @click="visible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="confirm">确认拣货</el-button>
+        <el-button type="primary" :loading="saving" @click="confirm">{{ qty < current.qty && registerShort ? '登记缺货并确认' : '确认拣货' }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -60,6 +66,8 @@ const saving = ref(false)
 const visible = ref(false)
 const current = ref({})
 const qty = ref(0)
+const registerShort = ref(true)
+const shortReason = ref('')
 const query = reactive({ current: 1, size: 20, keyword: '', status: 'NEW' })
 
 async function load() {
@@ -76,6 +84,8 @@ async function load() {
 function open(row) {
   current.value = row
   qty.value = row.qty
+  registerShort.value = true
+  shortReason.value = ''
   visible.value = true
 }
 
@@ -83,8 +93,13 @@ async function confirm() {
   if (qty.value <= 0) return ElMessage.warning('拣货数量必须大于0')
   saving.value = true
   try {
-    await outbound.pick(current.value.id, qty.value)
-    ElMessage.success('拣货完成')
+    if (qty.value < current.value.qty && registerShort.value) {
+      await outbound.shortageRegister(current.value.id, { qty: current.value.qty - qty.value, reason: shortReason.value })
+      ElMessage.success(`拣货完成，已登记缺货 ${current.value.qty - qty.value}`)
+    } else {
+      await outbound.pick(current.value.id, qty.value)
+      ElMessage.success('拣货完成')
+    }
     visible.value = false
     load()
   } finally {

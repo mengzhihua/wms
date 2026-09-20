@@ -69,6 +69,9 @@
         <el-descriptions-item label="仓库">{{ current.warehouseCode }}</el-descriptions-item>
         <el-descriptions-item label="出库单数">{{ current.orderCount }}</el-descriptions-item>
         <el-descriptions-item label="应拣/实拣/已播种">{{ current.totalQty }} / {{ current.pickedQty }} / {{ current.sowedQty }}</el-descriptions-item>
+        <el-descriptions-item label="波次策略">{{ current.strategyCode || '手工' }}</el-descriptions-item>
+        <el-descriptions-item label="打包策略">{{ PACK[current.packStrategy] || current.packStrategy || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="备注" :span="2">{{ current.remark || '-' }}</el-descriptions-item>
       </el-descriptions>
 
       <el-steps :active="stepIndex" finish-status="success" simple style="margin: 14px 0">
@@ -124,7 +127,8 @@
           </template>
         </el-table-column>
       </el-table>
-      <div v-if="current.status === 'SOWED'" style="margin-top: 14px; text-align: right">
+      <div v-if="canWrite() && current.status === 'SOWED'" style="margin-top: 14px; text-align: right">
+        <el-button v-if="(current.orders || []).some((o) => o.status === 'PICKED')" type="primary" plain :loading="saving" @click="buildPackages">按波次生成包裹</el-button>
         <el-button type="success" :loading="saving" @click="ship(current)">波次发运</el-button>
       </div>
     </el-drawer>
@@ -135,10 +139,16 @@
         <el-form-item label="拣货库位">{{ pickTask.fromLocation }} → {{ pickTask.toLocation }}</el-form-item>
         <el-form-item label="实拣数量"><el-input-number v-model="pickQty" :min="0" :max="pickTask.qty" style="width: 100%" /></el-form-item>
       </el-form>
-      <el-alert v-if="pickQty < pickTask.qty" type="warning" :closable="false">少拣 {{ pickTask.qty - pickQty }}，按出库单优先级依次满足，缺口释放分配。</el-alert>
+      <template v-if="pickQty < pickTask.qty">
+        <el-alert type="warning" :closable="false">少拣 {{ pickTask.qty - pickQty }}，按出库单优先级依次满足，缺口释放分配。</el-alert>
+        <el-form label-width="90px" style="margin-top: 10px">
+          <el-form-item label="登记缺货"><el-switch v-model="registerShort" /></el-form-item>
+          <el-form-item v-if="registerShort" label="缺货原因"><el-input v-model="shortReason" placeholder="库位无货 / 货损 / 找不到" /></el-form-item>
+        </el-form>
+      </template>
       <template #footer>
         <el-button @click="pickVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="confirmPick">确认</el-button>
+        <el-button type="primary" :loading="saving" @click="confirmPick">{{ pickQty < pickTask.qty && registerShort ? '登记缺货并确认' : '确认' }}</el-button>
       </template>
     </el-dialog>
 
@@ -166,6 +176,7 @@ import { useOptions } from '../../composables/useOptions'
 import { fmt } from '../../utils'
 
 const STATUSES = ['NEW', 'PICKING', 'SOWING', 'SOWED', 'SHIPPED', 'CANCELLED']
+const PACK = { ONE_ORDER_ONE_PACKAGE: '一单一包', SPLIT_BY_WEIGHT: '按重量拆箱' }
 const STEP = { NEW: 1, PICKING: 1, SOWING: 2, SOWED: 3, SHIPPED: 4, CANCELLED: 0 }
 
 const { options } = useOptions(['warehouse'])
@@ -188,6 +199,8 @@ const stepIndex = computed(() => STEP[current.value.status] ?? 0)
 const pickVisible = ref(false)
 const pickTask = ref({})
 const pickQty = ref(0)
+const registerShort = ref(true)
+const shortReason = ref('')
 const sowVisible = ref(false)
 const sowTask = ref({})
 const sowQty = ref(0)
@@ -241,16 +254,35 @@ async function openDetail(row) {
 function openPick(row) {
   pickTask.value = row
   pickQty.value = row.qty
+  registerShort.value = true
+  shortReason.value = ''
   pickVisible.value = true
 }
 
 async function confirmPick() {
   saving.value = true
   try {
-    current.value = await outbound.wavePick(pickTask.value.id, pickQty.value)
-    ElMessage.success(current.value.status === 'SOWING' ? '总拣完成，已生成播种任务' : '总拣确认成功')
+    if (pickQty.value < pickTask.value.qty && registerShort.value) {
+      const shorts = await outbound.shortageRegisterWave(pickTask.value.id, { qty: pickTask.value.qty - pickQty.value, reason: shortReason.value })
+      current.value = await outbound.waveGet(current.value.id)
+      ElMessage.success(`总拣确认，已按优先级登记 ${shorts.length} 条缺货`)
+    } else {
+      current.value = await outbound.wavePick(pickTask.value.id, pickQty.value)
+      ElMessage.success(current.value.status === 'SOWING' ? '总拣完成，已生成播种任务' : '总拣确认成功')
+    }
     pickVisible.value = false
     await load()
+  } finally {
+    saving.value = false
+  }
+}
+
+async function buildPackages() {
+  saving.value = true
+  try {
+    const pkgs = await outbound.packageBuild({ waveId: current.value.id })
+    current.value = await outbound.waveGet(current.value.id)
+    ElMessage.success(`已生成 ${pkgs.length} 个包裹，可在「包裹管理」填运单`)
   } finally {
     saving.value = false
   }

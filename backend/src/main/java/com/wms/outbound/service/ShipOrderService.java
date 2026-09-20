@@ -1,6 +1,7 @@
 package com.wms.outbound.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.wms.basic.entity.Carton;
 import com.wms.basic.entity.Item;
 import com.wms.basic.entity.Location;
@@ -12,9 +13,11 @@ import com.wms.inventory.entity.Inventory;
 import com.wms.inventory.mapper.InventoryMapper;
 import com.wms.inventory.service.InventoryService;
 import com.wms.inventory.service.SerialService;
+import com.wms.outbound.entity.Package;
 import com.wms.outbound.entity.PickTask;
 import com.wms.outbound.entity.ShipOrder;
 import com.wms.outbound.entity.ShipOrderLine;
+import com.wms.outbound.mapper.PackageMapper;
 import com.wms.outbound.mapper.PickTaskMapper;
 import com.wms.outbound.mapper.ShipOrderLineMapper;
 import com.wms.outbound.mapper.ShipOrderMapper;
@@ -29,6 +32,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 出库流程: 出库单(NEW) -> 分配(ALLOCATED / PART_ALLOCATED, 生成拣货任务) -> 拣货(PICKING/PICKED, 库存移至发货暂存区)
@@ -41,6 +45,7 @@ public class ShipOrderService {
     private final ShipOrderMapper orderMapper;
     private final ShipOrderLineMapper lineMapper;
     private final PickTaskMapper taskMapper;
+    private final PackageMapper packageMapper;
     private final ItemMapper itemMapper;
     private final CartonMapper cartonMapper;
     private final InventoryMapper inventoryMapper;
@@ -246,6 +251,7 @@ public class ShipOrderService {
         }
 
         task.setPickedQty(pickQty);
+        task.setShortQty(shortQty);
         task.setStatus("DONE");
         taskMapper.updateById(task);
 
@@ -435,7 +441,39 @@ public class ShipOrderService {
         order.setShippedAt(LocalDateTime.now());
         order.setStatus("SHIPPED");
         orderMapper.updateById(order);
+        packageMapper.update(null, new LambdaUpdateWrapper<Package>()
+                .eq(Package::getOrderId, orderId).eq(Package::getStatus, "NEW")
+                .set(Package::getStatus, "SHIPPED")
+                .set(order.getCarrier() != null, Package::getCarrier, order.getCarrier())
+                .set(order.getTrackingNo() != null, Package::getTrackingNo, order.getTrackingNo()));
         return load(orderId);
+    }
+
+    /** 撤销复核打包: PACKED -> PICKED (包材已扣减的不回滚) */
+    @Transactional
+    public ShipOrder unpack(Long orderId) {
+        ShipOrder order = require(orderId);
+        if (!"PACKED".equals(order.getStatus())) {
+            throw new BizException("仅已打包未发运的出库单可撤销打包");
+        }
+        order.setPackageCount(null);
+        order.setGrossWeight(null);
+        order.setPackedAt(null);
+        order.setStatus("PICKED");
+        orderMapper.updateById(order);
+        return load(orderId);
+    }
+
+    /** 波次内的出库单(含已完成拣货任务) */
+    public List<ShipOrder> loadWaveOrders(Long waveId) {
+        List<Long> ids = taskMapper.selectList(new LambdaQueryWrapper<PickTask>().eq(PickTask::getWaveId, waveId))
+                .stream().map(PickTask::getOrderId).distinct().collect(Collectors.toList());
+        if (ids.isEmpty()) {
+            return new ArrayList<>();
+        }
+        List<ShipOrder> list = orderMapper.selectBatchIds(ids);
+        list.sort(Comparator.comparing(ShipOrder::getId));
+        return list;
     }
 
     @Transactional

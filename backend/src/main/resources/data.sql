@@ -88,3 +88,21 @@ INSERT INTO wms_ship_order_line (order_id, line_no, item_code, order_qty, alloca
 SELECT id, 1, 'SKU001', 2, 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 FROM wms_ship_order WHERE code='SO-IR-STUCK'
   AND NOT EXISTS (SELECT 1 FROM wms_ship_order_line WHERE order_id=wms_ship_order.id);
+
+-- 波次策略预置(按优先级依次匹配已分配出库单; 打包策略: ONE_ORDER_ONE_PACKAGE 一单一包 / SPLIT_BY_WEIGHT 按重量拆包)
+INSERT INTO wms_wave_strategy (code, name, priority, min_orders, max_orders, min_sku_per_order, max_sku_per_order, min_qty_per_order, max_qty_per_order, group_by_item, pack_strategy, enabled, remark, created_at, updated_at)
+SELECT 'SISQ', '单品单件', 10, 2, 50, 1, 1, 1, 1, TRUE, 'ONE_ORDER_ONE_PACKAGE', TRUE, '每单一个SKU一件, 同SKU成波', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wms_wave_strategy WHERE code='SISQ');
+INSERT INTO wms_wave_strategy (code, name, priority, min_orders, max_orders, min_sku_per_order, max_sku_per_order, min_qty_per_order, max_qty_per_order, group_by_item, pack_strategy, enabled, remark, created_at, updated_at)
+SELECT 'SIFQ_2', '一品两件', 20, 2, 50, 1, 1, 2, 2, TRUE, 'ONE_ORDER_ONE_PACKAGE', TRUE, '每单一个SKU两件, 同SKU成波', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wms_wave_strategy WHERE code='SIFQ_2');
+INSERT INTO wms_wave_strategy (code, name, priority, min_orders, max_orders, min_sku_per_order, max_sku_per_order, min_qty_per_order, max_qty_per_order, group_by_item, pack_strategy, max_package_weight, enabled, remark, created_at, updated_at)
+SELECT 'SIW', '一品波次', 30, 2, 50, 1, 1, 0, 0, TRUE, 'SPLIT_BY_WEIGHT', 15, TRUE, '每单一个SKU件数不限, 同SKU成波', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wms_wave_strategy WHERE code='SIW');
+INSERT INTO wms_wave_strategy (code, name, priority, min_orders, max_orders, min_sku_per_order, max_sku_per_order, min_qty_per_order, max_qty_per_order, group_by_item, pack_strategy, enabled, remark, created_at, updated_at)
+SELECT 'TCQ_2', '两品两件(A+B)', 40, 2, 50, 2, 2, 2, 2, FALSE, 'ONE_ORDER_ONE_PACKAGE', TRUE, '每单两个SKU共两件', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wms_wave_strategy WHERE code='TCQ_2');
+INSERT INTO wms_wave_strategy (code, name, priority, min_orders, max_orders, min_sku_per_order, max_sku_per_order, min_qty_per_order, max_qty_per_order, group_by_item, pack_strategy, enabled, remark, created_at, updated_at)
+SELECT 'SIMO', '一单一件多品波次', 50, 2, 100, 1, 1, 1, 1, FALSE, 'ONE_ORDER_ONE_PACKAGE', TRUE, '每单一件, 波次内SKU可不同', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wms_wave_strategy WHERE code='SIMO');
+INSERT INTO wms_wave_strategy (code, name, priority, min_orders, max_orders, zone_code, pack_strategy, max_package_weight, enabled, remark, created_at, updated_at)
+SELECT 'SAW', '单区波次', 60, 1, 30, 'STA', 'SPLIT_BY_WEIGHT', 15, TRUE, '出库单库存全部位于同一储区', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wms_wave_strategy WHERE code='SAW');
+INSERT INTO wms_wave_strategy (code, name, priority, min_orders, max_orders, pack_strategy, max_package_weight, enabled, remark, created_at, updated_at)
+SELECT 'MIX', '混合(默认)', 90, 1, 30, 'SPLIT_BY_WEIGHT', 15, TRUE, '无约束, 兜底策略', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wms_wave_strategy WHERE code='MIX');
+INSERT INTO wms_wave_strategy (code, name, priority, min_orders, max_orders, cutoff_hour, pack_strategy, max_package_weight, enabled, remark, created_at, updated_at)
+SELECT 'EOW', '尾单', 99, 1, 200, 17, 'SPLIT_BY_WEIGHT', 15, FALSE, '每天 17 点后把剩余订单收尾成波', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wms_wave_strategy WHERE code='EOW');

@@ -127,6 +127,7 @@ public class InventoryService {
         if (FROZEN.equals(src.getStatus())) {
             throw new BizException("冻结库存不可移动");
         }
+        requireNotCountLocked(src);
         if (src.getAvailableQty().compareTo(qty) < 0) {
             throw new BizException("可用库存不足，可用 " + src.getAvailableQty());
         }
@@ -176,6 +177,7 @@ public class InventoryService {
     @Transactional
     public Inventory adjust(Long inventoryId, BigDecimal newQty, String reason, String refNo) {
         Inventory inv = requireInventory(inventoryId);
+        requireNotCountLocked(inv);
         if (newQty == null || newQty.signum() < 0) {
             throw new BizException("调整后数量不能为负");
         }
@@ -190,6 +192,12 @@ public class InventoryService {
         txn("ADJUST", inv, inv.getLocationCode(), inv.getLocationCode(), diff, refNo, reason);
         saveOrRemove(inv);
         return inv;
+    }
+
+    private void requireNotCountLocked(Inventory inv) {
+        if (Boolean.TRUE.equals(inv.getCountLock())) {
+            throw new BizException("库存已被盘点计划锁定: 库位 " + inv.getLocationCode() + " 物料 " + inv.getItemCode());
+        }
     }
 
     /** 冻结 / 解冻 */
@@ -253,6 +261,7 @@ public class InventoryService {
             int updated = inventoryMapper.update(null, new LambdaUpdateWrapper<Inventory>()
                     .eq(Inventory::getId, inv.getId())
                     .eq(Inventory::getStatus, AVAILABLE)
+                    .and(w -> w.isNull(Inventory::getCountLock).or().eq(Inventory::getCountLock, false))
                     .apply("qty - allocated_qty >= {0}", take)
                     .setSql("allocated_qty = allocated_qty + " + take.toPlainString()));
             if (updated == 0) {

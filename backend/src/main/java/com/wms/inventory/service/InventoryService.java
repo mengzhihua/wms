@@ -98,7 +98,7 @@ public class InventoryService {
     @Transactional
     public void deduct(Long inventoryId, BigDecimal qty, boolean releaseAllocation, String refNo, String txnType) {
         requirePositive(qty);
-        Inventory inv = requireInventory(inventoryId);
+        Inventory inv = lockInventory(inventoryId);
         requireNotCountLocked(inv);
         if (inv.getQty().compareTo(qty) < 0) {
             throw new BizException("库存不足: 库位 " + inv.getLocationCode() + " 物料 " + inv.getItemCode()
@@ -125,7 +125,7 @@ public class InventoryService {
     @Transactional
     public Inventory move(Long inventoryId, BigDecimal qty, String toLocation, String refNo, String txnType, String targetRefNo) {
         requirePositive(qty);
-        Inventory src = requireInventory(inventoryId);
+        Inventory src = lockInventory(inventoryId);
         if (FROZEN.equals(src.getStatus())) {
             throw new BizException("冻结库存不可移动");
         }
@@ -178,7 +178,7 @@ public class InventoryService {
     /** 库存调整 (盘盈/盘亏/损益) */
     @Transactional
     public Inventory adjust(Long inventoryId, BigDecimal newQty, String reason, String refNo) {
-        Inventory inv = requireInventory(inventoryId);
+        Inventory inv = lockInventory(inventoryId);
         requireNotCountLocked(inv);
         if (newQty == null || newQty.signum() < 0) {
             throw new BizException("调整后数量不能为负");
@@ -365,6 +365,17 @@ public class InventoryService {
 
     public Inventory requireInventory(Long id) {
         Inventory inv = inventoryMapper.selectById(id);
+        if (inv == null) {
+            throw new BizException("库存记录不存在: " + id);
+        }
+        return inv;
+    }
+
+    /** 当前事务内行锁读取(SELECT ... FOR UPDATE), 供扣减/移库/调整/盘点加锁等写操作串行化 */
+    @Transactional
+    public Inventory lockInventory(Long id) {
+        Inventory inv = inventoryMapper.selectOne(new LambdaQueryWrapper<Inventory>()
+                .eq(Inventory::getId, id).last("FOR UPDATE"));
         if (inv == null) {
             throw new BizException("库存记录不存在: " + id);
         }

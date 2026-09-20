@@ -83,7 +83,7 @@ scripts/smoke.sh
 
 脚本先校验匿名请求被拒（401）并以 `WMS_USER` / `WMS_PASS`（默认 admin / admin123）登录，再依次完成：创建 ASN → 收货 → 上架 → 建出库单 → 分配（含部分分配）→ 拣货 → 发运 → 移库 / 冻结 / 调整 → 盘点过账 → 两单波次总拣 / 播种 / 波次发运 → 越库收货直发，并输出库存汇总与流水统计。
 
-> 注意：H2 默认使用 `./data/wms` 文件库，`schema.sql` 仅 `CREATE TABLE IF NOT EXISTS`；升级到含越库 / 波次 / 登录鉴权的版本时请删除旧的 `backend/data` 目录（或在 MySQL 中手工补充 `wms_asn.cross_dock_*`、`wms_pick_task.wave_id` 及 `wms_wave*` / `wms_sow_task` / `wms_user` 表）。
+> 注意：`schema.sql` 仅 `CREATE TABLE IF NOT EXISTS`，不会修改已有表。H2 文件库（`./data/wms`）启动时会额外执行 `schema-h2-upgrade.sql` 自动补列；**已有 MySQL 库升级**需手工执行 `backend/src/main/resources/db/mysql-upgrade.sql`（含历次新增列，列已存在的语句报 1060 可忽略），并补建新表（`wms_wave*` / `wms_sow_task` / `wms_user` / `wms_count_*` / `wms_package*` 等，可直接执行 `schema.sql`）。
 
 ### 单元 / 集成测试
 

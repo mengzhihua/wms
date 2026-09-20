@@ -13,3 +13,5 @@ frontend/dist/
 .vscode/
 *.iml
 .DS_Store
+release/
+backend/src/main/resources/static/

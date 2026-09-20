@@ -2,6 +2,15 @@
 INSERT INTO wms_warehouse (code, name, address, contact, phone, status, created_at, updated_at)
 SELECT 'WH01', '上海中心仓', '上海市青浦区华新镇', '张伟', '13800000001', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wms_warehouse WHERE code = 'WH01');
+INSERT INTO wms_warehouse (code, name, address, contact, phone, status, created_at, updated_at)
+SELECT 'WH02', '北京仓', '北京市大兴区', '李娜', '13800000002', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wms_warehouse WHERE code = 'WH02');
+INSERT INTO wms_zone (warehouse_code, code, name, type, status, created_at, updated_at)
+SELECT 'WH02', 'PCK', '拣货区', 'PICKING', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wms_zone WHERE warehouse_code='WH02' AND code='PCK');
+INSERT INTO wms_location (warehouse_code, zone_code, code, type, abc_class, aisle, bay, level, pick_seq, mix_sku, mix_lot, status, created_at, updated_at)
+SELECT 'WH02', 'PCK', 'P-01-01', 'PICKING', 'A', '01', '01', '01', 5, TRUE, TRUE, 'AVAILABLE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wms_location WHERE warehouse_code='WH02' AND code='P-01-01');
 
 INSERT INTO wms_zone (warehouse_code, code, name, type, status, created_at, updated_at)
 SELECT 'WH01', 'RCV', '收货区', 'RECEIVING', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wms_zone WHERE warehouse_code='WH01' AND code='RCV');

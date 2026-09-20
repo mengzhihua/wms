@@ -50,9 +50,11 @@ public class OpenIrController {
     @Data
     public static class ReplenishReq {
         private String warehouseCode;
+        private String fromWarehouseCode;
         private String ownerCode;
         private String sku;
         private String targetKey;
+        private BigDecimal qty;
     }
 
     @GetMapping("/snapshots")
@@ -129,6 +131,11 @@ public class OpenIrController {
         if (warehouse == null) {
             throw new BizException("warehouseCode 必填");
         }
+        if (req.getFromWarehouseCode() != null && !req.getFromWarehouseCode().trim().isEmpty()) {
+            return R.ok(replenishService.transfer(
+                    toWmsWarehouse(req.getFromWarehouseCode()), toWmsWarehouse(warehouse),
+                    req.getSku(), req.getOwnerCode(), req.getQty()));
+        }
         return R.ok(replenishService.generate(toWmsWarehouse(warehouse), req.getOwnerCode(), req.getSku()));
     }
 
@@ -145,9 +152,16 @@ public class OpenIrController {
         }
         if ("WMS_REPLENISH".equals(type)) {
             String warehouse = first(string(params.get("warehouseCode")), targetKey);
+            String from = first(string(params.get("fromWarehouseCode")),
+                    string(params.get("fromWarehouse")));
+            String sku = first(string(params.get("sku")), string(params.get("itemCode")));
+            if (from != null) {
+                return R.ok(replenishService.transfer(
+                        toWmsWarehouse(from), toWmsWarehouse(warehouse), sku,
+                        string(params.get("ownerCode")), decimal(params.get("qty"))));
+            }
             return R.ok(replenishService.generate(toWmsWarehouse(warehouse),
-                    string(params.get("ownerCode")),
-                    first(string(params.get("sku")), string(params.get("itemCode")))));
+                    string(params.get("ownerCode")), sku));
         }
         throw new BizException("不支持的 IR 指令: " + type);
     }
@@ -215,6 +229,18 @@ public class OpenIrController {
 
     private static String string(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    private static BigDecimal decimal(Object value) {
+        if (value == null || String.valueOf(value).trim().isEmpty()
+                || "null".equals(String.valueOf(value))) {
+            return null;
+        }
+        try {
+            return new BigDecimal(String.valueOf(value));
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     private static Object mapGet(Map<String, Object> map, String... names) {

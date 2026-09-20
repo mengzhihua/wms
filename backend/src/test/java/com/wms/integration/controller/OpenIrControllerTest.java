@@ -79,5 +79,16 @@ public class OpenIrControllerTest {
                                 + "\"params\":{\"warehouseCode\":\"WH01\",\"sku\":\"SKU001\"}}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
+
+        mockMvc.perform(post("/api/open/ir/actions")
+                        .header("X-Api-Key", "test-open-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"type\":\"WMS_REPLENISH\",\"targetKey\":\"WH-BJ\","
+                                + "\"params\":{\"warehouseCode\":\"WH-BJ\",\"fromWarehouseCode\":\"WH-SH\","
+                                + "\"sku\":\"SKU001\",\"qty\":5}}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data[0].status").value("DONE"))
+                .andExpect(jsonPath("$.data[0].itemCode").value("SKU001"));
     }
 }

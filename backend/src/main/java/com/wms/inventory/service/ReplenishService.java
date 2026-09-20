@@ -43,6 +43,65 @@ public class ReplenishService {
         return generate(warehouse, owner, null);
     }
 
+    /**
+     * IR 库存再平衡：从源仓扣可用库存，写入目标仓拣货位。
+     * 源仓=目标仓时退回仓内 Min/Max 补货。
+     */
+    @Transactional
+    public List<ReplenishTask> transfer(String fromWarehouse, String toWarehouse,
+                                       String sku, String owner, BigDecimal qty) {
+        if (fromWarehouse == null || fromWarehouse.trim().isEmpty()
+                || toWarehouse == null || toWarehouse.trim().isEmpty()) {
+            throw new BizException("跨仓调拨需要源仓和目标仓");
+        }
+        if (fromWarehouse.equals(toWarehouse)) {
+            return generate(toWarehouse, owner, sku);
+        }
+        if (sku == null || sku.trim().isEmpty()) {
+            throw new BizException("跨仓调拨需要 sku");
+        }
+        String item = sku.trim();
+        BigDecimal need = qty == null || qty.signum() <= 0 ? new BigDecimal("10") : qty;
+        List<Inventory> sources = inventoryMapper.selectList(new LambdaQueryWrapper<Inventory>()
+                        .eq(Inventory::getWarehouseCode, fromWarehouse)
+                        .eq(Inventory::getItemCode, item)
+                        .eq(owner != null && !owner.isEmpty(), Inventory::getOwnerCode, owner)
+                        .eq(Inventory::getStatus, InventoryService.AVAILABLE)
+                        .gt(Inventory::getQty, 0))
+                .stream()
+                .sorted(Comparator.comparing(Inventory::getAvailableQty).reversed())
+                .collect(Collectors.toList());
+        String toLoc = destLocation(toWarehouse);
+        if (toLoc == null) {
+            throw new BizException("目标仓没有可用库位: " + toWarehouse);
+        }
+        List<ReplenishTask> created = new ArrayList<>();
+        for (Inventory src : sources) {
+            if (need.signum() <= 0) {
+                break;
+            }
+            BigDecimal q = src.getAvailableQty().min(need);
+            if (q.signum() <= 0) {
+                continue;
+            }
+            ReplenishTask task = insertTask(src, q, toLoc,
+                    "IR 跨仓调拨 " + fromWarehouse + " -> " + toWarehouse);
+            task.setWarehouseCode(toWarehouse);
+            taskMapper.updateById(task);
+            inventoryService.deduct(src.getId(), q, false, task.getCode(), "TRANSFER_OUT");
+            inventoryService.add(toWarehouse, toLoc, src.getOwnerCode(), src.getItemCode(),
+                    src.getLotNo(), q, src.getExpiryDate(), task.getCode(), "TRANSFER_IN", BigDecimal.ZERO);
+            task.setStatus("DONE");
+            taskMapper.updateById(task);
+            created.add(task);
+            need = need.subtract(q);
+        }
+        if (created.isEmpty()) {
+            throw new BizException("源仓可用库存不足: " + fromWarehouse + " / " + item);
+        }
+        return created;
+    }
+
     /** sku 非空时只对该物料生成补货任务，供 IR 按缺货 SKU 下发。 */
     @Transactional
     public List<ReplenishTask> generate(String warehouse, String owner, String sku) {
@@ -148,6 +207,18 @@ public class ReplenishService {
     }
 
     // ------------------------------------------------------------------ helpers
+
+    private String destLocation(String warehouse) {
+        List<Location> locs = locationMapper.selectList(new LambdaQueryWrapper<Location>()
+                .eq(Location::getWarehouseCode, warehouse)
+                .eq(Location::getStatus, "AVAILABLE"));
+        for (Location loc : locs) {
+            if ("PICKING".equals(loc.getType())) {
+                return loc.getCode();
+            }
+        }
+        return locs.isEmpty() ? null : locs.get(0).getCode();
+    }
 
     /** 已存放该物料的拣货位优先；否则取第一个空的可用拣货位 */
     private String pickLocationFor(String warehouse, Item item, List<Inventory> itemStock, Map<String, Location> locs) {

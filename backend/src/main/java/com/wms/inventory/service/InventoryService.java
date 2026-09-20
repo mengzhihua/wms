@@ -53,7 +53,7 @@ public class InventoryService {
     private Inventory upsert(String warehouse, String location, String owner, String item, String lot,
                              BigDecimal qty, LocalDate expiry, String refNo, BigDecimal reserved) {
         requirePositive(qty);
-        Location loc = requireLocation(warehouse, location);
+        Location loc = lockLocation(warehouse, location);
         if ("DISABLED".equals(loc.getStatus())) {
             throw new BizException("库位 " + location + " 已禁用");
         }
@@ -71,6 +71,9 @@ public class InventoryService {
                 .last("LIMIT 1"));
         if (inv != null) {
             inv = tryLockInventory(inv.getId());
+            if (inv != null && !AVAILABLE.equals(inv.getStatus())) {
+                inv = null;
+            }
         }
         if (inv == null) {
             inv = new Inventory();
@@ -208,7 +211,7 @@ public class InventoryService {
     /** 冻结 / 解冻 */
     @Transactional
     public Inventory setFrozen(Long inventoryId, boolean frozen, String reason) {
-        Inventory inv = requireInventory(inventoryId);
+        Inventory inv = lockInventory(inventoryId);
         if (frozen && nz(inv.getAllocatedQty()).signum() > 0) {
             throw new BizException("存在已分配数量，不能冻结");
         }
@@ -285,7 +288,7 @@ public class InventoryService {
 
     @Transactional
     public void release(Long inventoryId, BigDecimal qty, String refNo) {
-        Inventory inv = inventoryMapper.selectById(inventoryId);
+        Inventory inv = tryLockInventory(inventoryId);
         if (inv == null) {
             return;
         }
@@ -350,6 +353,16 @@ public class InventoryService {
     public Location requireLocation(String warehouse, String code) {
         Location loc = locationMapper.selectOne(new LambdaQueryWrapper<Location>()
                 .eq(Location::getWarehouseCode, warehouse).eq(Location::getCode, code));
+        if (loc == null) {
+            throw new BizException("库位不存在: " + code);
+        }
+        return loc;
+    }
+
+    /** 行锁库位, 使同库位的库存合并/新建串行, 避免并发首次入库产生重复库存行 */
+    private Location lockLocation(String warehouse, String code) {
+        Location loc = locationMapper.selectOne(new LambdaQueryWrapper<Location>()
+                .eq(Location::getWarehouseCode, warehouse).eq(Location::getCode, code).last("FOR UPDATE"));
         if (loc == null) {
             throw new BizException("库位不存在: " + code);
         }

@@ -383,6 +383,7 @@ public class ShipOrderService {
                 .eq(Inventory::getOwnerCode, carton.getOwnerCode())
                 .eq(Inventory::getItemCode, carton.getItemCode())
                 .eq(Inventory::getStatus, "AVAILABLE")
+                .and(w -> w.isNull(Inventory::getCountLock).or().eq(Inventory::getCountLock, false))
                 .orderByAsc(Inventory::getExpiryDate, Inventory::getReceiveDate, Inventory::getId));
         BigDecimal need = BigDecimal.valueOf(count);
         for (Inventory inv : stock) {

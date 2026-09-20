@@ -164,7 +164,8 @@ public class CountPlanService {
         if (scope.isEmpty()) {
             throw new BizException("盘点范围内没有库存");
         }
-        for (Inventory inv : scope) {
+        for (Inventory candidate : scope) {
+            Inventory inv = inventoryService.lockInventory(candidate.getId());
             if (Boolean.TRUE.equals(inv.getCountLock())) {
                 throw new BizException("库存已被其他盘点计划锁定: 库位 " + inv.getLocationCode() + " 物料 " + inv.getItemCode());
             }
@@ -262,10 +263,16 @@ public class CountPlanService {
     }
 
     private void lock(Long inventoryId, Long planId, boolean lock) {
-        inventoryMapper.update(null, new LambdaUpdateWrapper<Inventory>()
+        LambdaUpdateWrapper<Inventory> uw = new LambdaUpdateWrapper<Inventory>()
                 .eq(Inventory::getId, inventoryId)
                 .set(Inventory::getCountLock, lock)
-                .set(Inventory::getCountPlanId, lock ? planId : null));
+                .set(Inventory::getCountPlanId, lock ? planId : null);
+        if (lock) {
+            uw.and(w -> w.isNull(Inventory::getCountLock).or().eq(Inventory::getCountLock, false));
+        }
+        if (inventoryMapper.update(null, uw) != 1 && lock) {
+            throw new BizException("库存已被其他盘点计划锁定: " + inventoryId);
+        }
     }
 
     private void unlockAll(Long planId) {

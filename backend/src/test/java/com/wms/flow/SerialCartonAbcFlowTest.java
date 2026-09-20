@@ -196,9 +196,14 @@ class SerialCartonAbcFlowTest {
         assertEquals(1, txns.size());
         assertEquals(0, q(3).compareTo(txns.get(0).getQty()));
 
-        // 包材不足时拒绝
         ShipOrder another = pickedOrder("SKU003", 10);
         assertThrows(BizException.class, () -> orderService.pack(another.getId(), 3, null, null, null, "BOX-M"));
+        // 盘点锁定的包材库存不参与扣减: 仅剩 2 个且被锁定时视为不足, 解锁后可用
+        List<Inventory> pkgStock = inventoryMapper.selectList(new LambdaQueryWrapper<Inventory>()
+                .eq(Inventory::getOwnerCode, "OWN01").eq(Inventory::getItemCode, "PKG-BOX-M"));
+        pkgStock.forEach(i -> { i.setCountLock(true); inventoryMapper.updateById(i); });
+        assertThrows(BizException.class, () -> orderService.pack(another.getId(), 1, null, null, null, "BOX-M"));
+        pkgStock.forEach(i -> { i.setCountLock(false); inventoryMapper.updateById(i); });
         assertThrows(BizException.class, () -> orderService.pack(another.getId(), 1, null, null, null, "NO-SUCH"));
         assertEquals("PACKED", orderService.pack(another.getId(), 1, null, null, null, "BOX-S").getStatus());
     }

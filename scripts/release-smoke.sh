@@ -22,9 +22,22 @@ html="$(curl -sS "http://127.0.0.1:${PORT}/")"
 echo "$html" | grep -qiE '<html|<div id=.app' || { echo "SMOKE FAIL wms: / is not HTML"; exit 1; }
 spa="$(curl -sS -o /tmp/wms-spa.body -w "%{http_code}" "http://127.0.0.1:${PORT}/dashboard")"
 test "$spa" = "200"
-body="$(curl -sS -X POST "http://127.0.0.1:${PORT}/api/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}')"
-echo "$body" | grep -q '"code":0' || { echo "SMOKE FAIL wms: login code != 0: $body"; exit 1; }
-echo "$body" | grep -q '"token"' || { echo "SMOKE FAIL wms: login has no token: $body"; exit 1; }
+# admin 用 PBKDF2 初始化，Tomcat 可能先于 ApplicationRunner 对外服务，登录需重试
+body=""
+login_ok=0
+for _ in $(seq 1 30); do
+  body="$(curl -sS -X POST "http://127.0.0.1:${PORT}/api/auth/login" \
+    -H "Content-Type: application/json" \
+    -d '{"username":"admin","password":"admin123"}')"
+  if echo "$body" | grep -q '"code":0' && echo "$body" | grep -q '"token"'; then
+    login_ok=1
+    break
+  fi
+  sleep 1
+done
+if [[ "$login_ok" != "1" ]]; then
+  echo "SMOKE FAIL wms: login code != 0: $body"
+  tail -n 80 "$DIR/smoke.log" || true
+  exit 1
+fi
 echo "SMOKE OK wms :$PORT"

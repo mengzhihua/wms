@@ -255,14 +255,14 @@ public class AsnService {
         }
         Asn asn = require(task.getAsnId());
         AsnLine line = lineMapper.selectById(task.getAsnLineId());
-        inventoryService.setFrozen(task.getInventoryId(), false, "质检完成 " + task.getCode());
+        Inventory inv = inventoryService.setFrozen(task.getInventoryId(), false, "质检完成 " + task.getCode());
         if (reject.signum() > 0) {
-            inventoryService.deduct(task.getInventoryId(), reject, false, asn.getCode(), "QC_REJECT");
+            inventoryService.deduct(inv.getId(), reject, false, asn.getCode(), "QC_REJECT");
             line.setRejectedQty(nz(line.getRejectedQty()).add(reject));
             asn.setRejectedQty(nz(asn.getRejectedQty()).add(reject));
         }
         if (pass.signum() > 0) {
-            createPutawayTask(asn, line, task.getLotNo(), task.getInventoryId(), task.getLocationCode(), pass);
+            createPutawayTask(asn, line, task.getLotNo(), inv.getId(), task.getLocationCode(), pass);
         }
         lineMapper.updateById(line);
         asn.setQcQty(nz(asn.getQcQty()).subtract(task.getQty()));

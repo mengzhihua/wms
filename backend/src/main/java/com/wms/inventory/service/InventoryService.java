@@ -84,6 +84,7 @@ public class InventoryService {
             inv.setRefNo(refNo == null ? "" : refNo);
             inventoryMapper.insert(inv);
         } else {
+            requireNotCountLocked(inv);
             inv.setQty(inv.getQty().add(qty));
             if (reserved != null) {
                 inv.setAllocatedQty(nz(inv.getAllocatedQty()).add(reserved));
@@ -98,6 +99,7 @@ public class InventoryService {
     public void deduct(Long inventoryId, BigDecimal qty, boolean releaseAllocation, String refNo, String txnType) {
         requirePositive(qty);
         Inventory inv = requireInventory(inventoryId);
+        requireNotCountLocked(inv);
         if (inv.getQty().compareTo(qty) < 0) {
             throw new BizException("库存不足: 库位 " + inv.getLocationCode() + " 物料 " + inv.getItemCode()
                     + " 现有 " + inv.getQty() + ", 需要 " + qty);

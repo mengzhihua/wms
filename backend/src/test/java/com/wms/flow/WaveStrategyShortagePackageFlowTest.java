@@ -81,6 +81,45 @@ class WaveStrategyShortagePackageFlowTest {
         }
     }
 
+    private static WaveStrategyService.OrderProfile profile(Long orderId) {
+        WaveStrategyService.OrderProfile p = new WaveStrategyService.OrderProfile();
+        ShipOrder o = new ShipOrder();
+        o.setId(orderId);
+        o.setPriority(5);
+        p.setOrder(o);
+        return p;
+    }
+
+    private static String repeat(char c, int n) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < n; i++) {
+            sb.append(c);
+        }
+        return sb.toString();
+    }
+
+    @Test
+    void splitSkipsOrdersExceedingStrategyLimits() {
+        WaveStrategy s = new WaveStrategy();
+        s.setMaxOrders(10);
+        s.setMaxSkuItems(2);
+        s.setMaxTotalQty(q(10));
+        WaveStrategyService.OrderProfile small = profile(1L);
+        small.getItems().add("A");
+        small.setQty(q(3));
+        WaveStrategyService.OrderProfile tooManySku = profile(2L);
+        tooManySku.getItems().addAll(Arrays.asList("A", "B", "C"));
+        tooManySku.setQty(q(3));
+        WaveStrategyService.OrderProfile tooManyQty = profile(3L);
+        tooManyQty.getItems().add("A");
+        tooManyQty.setQty(q(11));
+        List<List<WaveStrategyService.OrderProfile>> chunks = WaveStrategyService.split(s,
+                Arrays.asList(tooManySku, tooManyQty, small));
+        assertEquals(1, chunks.size());
+        assertEquals(1, chunks.get(0).size());
+        assertSame(small, chunks.get(0).get(0));
+    }
+
     private static BigDecimal q(long v) {
         return BigDecimal.valueOf(v);
     }
@@ -197,8 +236,9 @@ class WaveStrategyShortagePackageFlowTest {
         }
         assertEquals("SOWED", w.getStatus());
 
-        // 按波次建包: TWS01 单重 0.5，策略 maxPackageWeight=5 拆箱
-        List<Package> pkgs = packageService.buildForWave(wa, null, s.getMaxPackageWeight());
+        // 按波次建包: TWS01 单重 0.5，不传重量时取波次保存的策略 maxPackageWeight=5 拆箱
+        assertEquals(0, q(5).compareTo(w.getMaxPackageWeight()));
+        List<Package> pkgs = packageService.buildForWave(wa, null, null);
         assertFalse(pkgs.isEmpty());
         Set<Long> pkgOrders = pkgs.stream().map(Package::getOrderId).collect(Collectors.toSet());
         assertEquals(new HashSet<>(Arrays.asList(a.getId(), b.getId())), pkgOrders);
@@ -261,6 +301,11 @@ class WaveStrategyShortagePackageFlowTest {
         List<Package> one = packageService.buildForOrder(o.getId(), null, null, null, null);
         assertEquals(1, one.size());
         assertEquals("ONE_ORDER_ONE_PACKAGE", one.get(0).getType());
+        Long pkgId = one.get(0).getId();
+        assertThrows(BizException.class, () -> packageService.updateTracking(pkgId, "YTO", "YT123", q(0)), "重量必须 > 0");
+        assertThrows(BizException.class, () -> packageService.updateTracking(pkgId, "YTO", repeat('X', 65), q(2)), "运单号超长");
+        assertEquals(1, packageService.load(pkgId).getLines().size());
+        assertEquals("LOT-TWS02", packageService.load(pkgId).getLines().get(0).getLotNo(), "包裹批次取实际拣货批次");
         packageService.updateTracking(one.get(0).getId(), "YTO", "YT123", q(2));
         assertEquals("YT123", packageService.load(one.get(0).getId()).getTrackingNo());
         assertEquals("SHIPPED", orderService.ship(o.getId()).getStatus());

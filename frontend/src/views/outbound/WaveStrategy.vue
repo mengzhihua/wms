@@ -11,7 +11,7 @@
         <template v-if="canWrite()">
           <el-button type="primary" :loading="running" @click="run(null, true)">预览匹配</el-button>
           <el-button type="success" :loading="running" @click="run(null, false)">执行全部启用策略</el-button>
-          <el-button type="primary" plain @click="openForm()"><el-icon><Plus /></el-icon>新增策略</el-button>
+          <el-button v-if="isAdmin()" type="primary" plain @click="openForm()"><el-icon><Plus /></el-icon>新增策略</el-button>
         </template>
         <el-button @click="load"><el-icon><Refresh /></el-icon>刷新</el-button>
       </div>
@@ -22,7 +22,7 @@
         <el-table-column prop="name" label="名称" min-width="130" show-overflow-tooltip />
         <el-table-column label="启用" width="70">
           <template #default="{ row }">
-            <el-switch :model-value="!!row.enabled" :disabled="!canWrite()" size="small" @change="toggle(row)" />
+            <el-switch :model-value="!!row.enabled" :disabled="!isAdmin()" size="small" @change="toggle(row)" />
           </template>
         </el-table-column>
         <el-table-column label="订单数" width="90"><template #default="{ row }">{{ range(row.minOrders, row.maxOrders) }}</template></el-table-column>
@@ -44,10 +44,12 @@
           <template #default="{ row }">
             <template v-if="canWrite()">
               <el-button link type="primary" size="small" @click="run(row.id, false)">执行</el-button>
-              <el-button link size="small" @click="openForm(row)">编辑</el-button>
-              <el-popconfirm title="删除该策略?" @confirm="remove(row)">
-                <template #reference><el-button link type="danger" size="small">删除</el-button></template>
-              </el-popconfirm>
+              <template v-if="isAdmin()">
+                <el-button link size="small" @click="openForm(row)">编辑</el-button>
+                <el-popconfirm title="删除该策略?" @confirm="remove(row)">
+                  <template #reference><el-button link type="danger" size="small">删除</el-button></template>
+                </el-popconfirm>
+              </template>
             </template>
           </template>
         </el-table-column>
@@ -125,7 +127,7 @@
 <script setup>
 import { onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { canWrite } from '../../auth'
+import { canWrite, isAdmin } from '../../auth'
 import { outbound } from '../../api'
 import { useOptions } from '../../composables/useOptions'
 

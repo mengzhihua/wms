@@ -220,8 +220,8 @@ public class CountPlanService {
             Set<String> itemCodes = list.stream().map(Inventory::getItemCode).collect(Collectors.toSet());
             Set<String> hit = itemMapper.selectList(new LambdaQueryWrapper<Item>().in(Item::getCode, itemCodes))
                     .stream().filter(i -> i.getAbcClass() != null && classes.contains(i.getAbcClass().toUpperCase()))
-                    .map(Item::getCode).collect(Collectors.toSet());
-            list.removeIf(i -> !hit.contains(i.getItemCode()));
+                    .map(i -> i.getOwnerCode() + "|" + i.getCode()).collect(Collectors.toSet());
+            list.removeIf(i -> !hit.contains(i.getOwnerCode() + "|" + i.getItemCode()));
         }
         if ("MOVEMENT".equals(p.getType()) || "ABNORMAL".equals(p.getType())) {
             LocalDate since = p.getSinceDate() == null ? LocalDate.now().minusDays(7) : p.getSinceDate();
@@ -313,13 +313,14 @@ public class CountPlanService {
         }
         long mismatch = recountMapper.selectCount(new LambdaQueryWrapper<RecountTask>().eq(RecountTask::getPlanId, id)
                 .eq(RecountTask::getFinalResult, "MISMATCH"));
-        long adjusts = adjustMapper.selectCount(new LambdaQueryWrapper<StockAdjust>().eq(StockAdjust::getPlanId, id));
-        if (mismatch > 0 && adjusts == 0) {
-            throw new BizException("存在差异但尚未生成调整单");
-        }
         if (adjustMapper.selectCount(new LambdaQueryWrapper<StockAdjust>().eq(StockAdjust::getPlanId, id)
                 .eq(StockAdjust::getStatus, "PENDING")) > 0) {
             throw new BizException("调整单尚未审核");
+        }
+        long approved = adjustMapper.selectCount(new LambdaQueryWrapper<StockAdjust>().eq(StockAdjust::getPlanId, id)
+                .eq(StockAdjust::getStatus, "APPROVED"));
+        if (mismatch > 0 && approved == 0) {
+            throw new BizException("存在差异但调整单尚未审核通过(已驳回请重新生成调整单)");
         }
         unlockAll(id);
         p.setStatus("COMPLETED");
@@ -358,7 +359,12 @@ public class CountPlanService {
 
     @Transactional
     public CountTask claim(Long taskId) {
-        return assign(taskId, operator());
+        CountTask t = requireTask(taskId);
+        String me = operator();
+        if ("CLAIMED".equals(t.getStatus()) && t.getAssignee() != null && !t.getAssignee().equals(me)) {
+            throw new BizException("任务已由 " + t.getAssignee() + " 领取, 请通过指派改派");
+        }
+        return assign(taskId, me);
     }
 
     @Transactional

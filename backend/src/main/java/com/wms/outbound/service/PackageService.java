@@ -7,6 +7,7 @@ import com.wms.common.BizException;
 import com.wms.common.CodeGenerator;
 import com.wms.outbound.entity.Package;
 import com.wms.outbound.entity.PackageLine;
+import com.wms.outbound.entity.PickTask;
 import com.wms.outbound.entity.ShipOrder;
 import com.wms.outbound.entity.ShipOrderLine;
 import com.wms.outbound.entity.Wave;
@@ -21,8 +22,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -83,10 +87,11 @@ public class PackageService {
         }
         String strategy = packStrategy != null && !packStrategy.isEmpty() ? packStrategy
                 : (wave.getPackStrategy() == null ? ONE_ORDER_ONE_PACKAGE : wave.getPackStrategy());
+        BigDecimal weight = maxWeight != null && maxWeight.signum() > 0 ? maxWeight : wave.getMaxPackageWeight();
         List<Package> out = new ArrayList<>();
         for (ShipOrder o : orderService.loadWaveOrders(waveId)) {
             if ("PICKED".equals(o.getStatus())) {
-                out.addAll(buildForOrder(o.getId(), strategy, maxWeight, null, null));
+                out.addAll(buildForOrder(o.getId(), strategy, weight, null, null));
             }
         }
         if (out.isEmpty()) {
@@ -134,8 +139,10 @@ public class PackageService {
             throw new BizException("至少一个包裹");
         }
         Map<String, BigDecimal> need = new HashMap<>();
+        Map<String, Set<String>> lotsByItem = new HashMap<>();
         for (PackageLine l : pickedLines(order)) {
             need.merge(key(l.getItemCode(), l.getLotNo()), l.getQty(), BigDecimal::add);
+            lotsByItem.computeIfAbsent(l.getItemCode(), k -> new HashSet<>()).add(l.getLotNo() == null ? "" : l.getLotNo());
         }
         Map<String, BigDecimal> got = new HashMap<>();
         List<List<PackageLine>> groups = new ArrayList<>();
@@ -147,6 +154,13 @@ public class PackageService {
             for (PackageLine l : b.getLines()) {
                 if (l.getQty() == null || l.getQty().signum() <= 0) {
                     throw new BizException("包裹明细数量必须大于0: " + l.getItemCode());
+                }
+                if ((l.getLotNo() == null || l.getLotNo().isEmpty()) && lotsByItem.containsKey(l.getItemCode())) {
+                    Set<String> lots = lotsByItem.get(l.getItemCode());
+                    if (lots.size() > 1) {
+                        throw new BizException("商品 " + l.getItemCode() + " 实拣多个批次, 分箱明细需指定批次");
+                    }
+                    l.setLotNo(lots.iterator().next());
                 }
                 String k = key(l.getItemCode(), l.getLotNo());
                 if (!need.containsKey(k)) {
@@ -163,11 +177,20 @@ public class PackageService {
                 throw new BizException("商品 " + e.getKey().replace("|", " ") + " 分箱数量 " + g + " ≠ 实拣 " + e.getValue());
             }
         }
+        Map<String, Integer> cartonCount = new LinkedHashMap<>();
+        for (ManualPackage b : boxes) {
+            if (b.getCartonCode() != null && !b.getCartonCode().trim().isEmpty()) {
+                cartonCount.merge(b.getCartonCode().trim(), 1, Integer::sum);
+            }
+        }
         List<Package> out = persist(order, MANUAL, groups, weights, carrier, null);
+        for (Map.Entry<String, Integer> e : cartonCount.entrySet()) {
+            orderService.consumeCarton(order, e.getKey(), e.getValue());
+        }
         for (int i = 0; i < out.size(); i++) {
             String carton = boxes.get(i).getCartonCode();
-            if (carton != null && !carton.isEmpty()) {
-                out.get(i).setCartonCode(carton);
+            if (carton != null && !carton.trim().isEmpty()) {
+                out.get(i).setCartonCode(carton.trim());
                 packageMapper.updateById(out.get(i));
             }
         }
@@ -194,9 +217,24 @@ public class PackageService {
         if (!"NEW".equals(p.getStatus())) {
             throw new BizException("包裹状态 " + p.getStatus() + " 不可修改");
         }
-        if (carrier != null) p.setCarrier(carrier);
-        if (trackingNo != null) p.setTrackingNo(trackingNo);
-        if (weight != null) p.setWeight(weight);
+        if (carrier != null && !carrier.trim().isEmpty()) {
+            if (carrier.trim().length() > 32) {
+                throw new BizException("承运商长度不能超过 32");
+            }
+            p.setCarrier(carrier.trim());
+        }
+        if (trackingNo != null && !trackingNo.trim().isEmpty()) {
+            if (trackingNo.trim().length() > 64) {
+                throw new BizException("运单号长度不能超过 64");
+            }
+            p.setTrackingNo(trackingNo.trim());
+        }
+        if (weight != null) {
+            if (weight.signum() <= 0) {
+                throw new BizException("包裹重量必须大于 0");
+            }
+            p.setWeight(weight);
+        }
         packageMapper.updateById(p);
         return p;
     }
@@ -239,15 +277,32 @@ public class PackageService {
         return orderService.tasks(order.getId()).stream().map(t -> t.getWaveId()).filter(w -> w != null).findFirst().orElse(null);
     }
 
+    /** 包裹明细按拣货任务的实拣批次汇总(同品同批合并); 无拣货任务时回退到单据行 */
     private List<PackageLine> pickedLines(ShipOrder order) {
-        List<PackageLine> out = new ArrayList<>();
-        for (ShipOrderLine l : order.getLines()) {
-            if (l.getPickedQty() != null && l.getPickedQty().signum() > 0) {
-                PackageLine pl = new PackageLine();
-                pl.setItemCode(l.getItemCode());
-                pl.setLotNo(l.getLotNo());
-                pl.setQty(l.getPickedQty());
-                out.add(pl);
+        Map<String, PackageLine> merged = new LinkedHashMap<>();
+        for (PickTask t : orderService.tasks(order.getId())) {
+            if (t.getPickedQty() != null && t.getPickedQty().signum() > 0) {
+                String lot = t.getLotNo() == null ? "" : t.getLotNo();
+                PackageLine pl = merged.computeIfAbsent(key(t.getItemCode(), lot), k -> {
+                    PackageLine n = new PackageLine();
+                    n.setItemCode(t.getItemCode());
+                    n.setLotNo(lot);
+                    n.setQty(BigDecimal.ZERO);
+                    return n;
+                });
+                pl.setQty(pl.getQty().add(t.getPickedQty()));
+            }
+        }
+        List<PackageLine> out = new ArrayList<>(merged.values());
+        if (out.isEmpty()) {
+            for (ShipOrderLine l : order.getLines()) {
+                if (l.getPickedQty() != null && l.getPickedQty().signum() > 0) {
+                    PackageLine pl = new PackageLine();
+                    pl.setItemCode(l.getItemCode());
+                    pl.setLotNo(l.getLotNo());
+                    pl.setQty(l.getPickedQty());
+                    out.add(pl);
+                }
             }
         }
         if (out.isEmpty()) {

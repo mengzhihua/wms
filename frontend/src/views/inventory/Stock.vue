@@ -21,15 +21,15 @@
         <el-table-column prop="lotNo" label="批次" width="120" />
         <el-table-column prop="qty" label="库存量" width="90" />
         <el-table-column prop="allocatedQty" label="已分配" width="90" />
-        <el-table-column label="可用量" width="90"><template #default="{ row }">{{ row.status === 'AVAILABLE' ? row.qty - row.allocatedQty : 0 }}</template></el-table-column>
-        <el-table-column label="状态" width="80"><template #default="{ row }"><StatusTag :value="row.status" /></template></el-table-column>
+        <el-table-column label="可用量" width="90"><template #default="{ row }">{{ row.status === 'AVAILABLE' && !row.countLock ? row.qty - row.allocatedQty : 0 }}</template></el-table-column>
+        <el-table-column label="状态" width="130"><template #default="{ row }"><StatusTag :value="row.status" /><el-tag v-if="row.countLock" type="warning" size="small" effect="plain" style="margin-left: 4px">盘点锁定</el-tag></template></el-table-column>
         <el-table-column prop="receiveDate" label="收货日期" width="110" />
         <el-table-column prop="expiryDate" label="效期" width="110" />
         <el-table-column prop="refNo" label="来源单号" min-width="160" />
         <el-table-column v-if="canWrite()" label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" :disabled="row.status !== 'AVAILABLE'" @click="openMove(row)">移库</el-button>
-            <el-button link type="warning" size="small" @click="openAdjust(row)">调整</el-button>
+            <el-button link type="primary" size="small" :disabled="row.status !== 'AVAILABLE' || row.countLock" @click="openMove(row)">移库</el-button>
+            <el-button link type="warning" size="small" :disabled="row.countLock" @click="openAdjust(row)">调整</el-button>
             <el-button link :type="row.status === 'FROZEN' ? 'success' : 'danger'" size="small" @click="openFreeze(row)">{{ row.status === 'FROZEN' ? '解冻' : '冻结' }}</el-button>
           </template>
         </el-table-column>

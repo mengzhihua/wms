@@ -104,6 +104,7 @@ public class WaveService {
             wave.setStrategyId(strategy.getId());
             wave.setStrategyCode(strategy.getCode());
             wave.setPackStrategy(strategy.getPackStrategy());
+            wave.setMaxPackageWeight(strategy.getMaxPackageWeight());
         }
         waveMapper.insert(wave);
 

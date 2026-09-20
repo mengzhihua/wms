@@ -123,6 +123,8 @@ CREATE TABLE IF NOT EXISTS wms_inventory (
   receive_date DATE,
   expiry_date DATE,
   ref_no VARCHAR(64) DEFAULT '',
+  count_lock BOOLEAN DEFAULT FALSE,
+  count_plan_id BIGINT,
   created_at TIMESTAMP,
   updated_at TIMESTAMP,
   INDEX idx_inv_item (warehouse_code, owner_code, item_code),
@@ -296,6 +298,7 @@ CREATE TABLE IF NOT EXISTS wms_pick_task (
   to_location VARCHAR(32),
   qty DECIMAL(18,3),
   picked_qty DECIMAL(18,3),
+  short_qty DECIMAL(18,3) DEFAULT 0,
   status VARCHAR(16),
   wave_id BIGINT,
   created_at TIMESTAMP,
@@ -313,6 +316,10 @@ CREATE TABLE IF NOT EXISTS wms_wave (
   picked_qty DECIMAL(18,3),
   sowed_qty DECIMAL(18,3),
   remark VARCHAR(255),
+  strategy_id BIGINT,
+  strategy_code VARCHAR(32),
+  pack_strategy VARCHAR(32),
+  max_package_weight DECIMAL(18,3),
   created_at TIMESTAMP,
   updated_at TIMESTAMP,
   CONSTRAINT uk_wave_code UNIQUE (code)
@@ -466,26 +473,6 @@ CREATE TABLE IF NOT EXISTS wms_replenish_task (
   created_at TIMESTAMP,
   updated_at TIMESTAMP
 );
-
--- ===================== 增量升级列（已存在时报错被 continue-on-error 忽略） =====================
-ALTER TABLE wms_item ADD COLUMN qc_required BOOLEAN DEFAULT FALSE;
-ALTER TABLE wms_asn ADD COLUMN customer_code VARCHAR(32);
-ALTER TABLE wms_asn ADD COLUMN qc_qty DECIMAL(18,3);
-ALTER TABLE wms_asn ADD COLUMN rejected_qty DECIMAL(18,3);
-ALTER TABLE wms_asn_line ADD COLUMN rejected_qty DECIMAL(18,3) DEFAULT 0;
-ALTER TABLE wms_ship_order ADD COLUMN tracking_no VARCHAR(64);
-ALTER TABLE wms_ship_order ADD COLUMN package_count INT;
-ALTER TABLE wms_ship_order ADD COLUMN gross_weight DECIMAL(18,3);
-ALTER TABLE wms_ship_order ADD COLUMN packed_at TIMESTAMP;
-ALTER TABLE wms_ship_order ADD COLUMN shipped_at TIMESTAMP;
-ALTER TABLE wms_ship_order ADD COLUMN carton_code VARCHAR(32);
-ALTER TABLE wms_item ADD COLUMN sn_control BOOLEAN DEFAULT FALSE;
-ALTER TABLE wms_inventory ADD COLUMN count_lock BOOLEAN DEFAULT FALSE;
-ALTER TABLE wms_inventory ADD COLUMN count_plan_id BIGINT;
-ALTER TABLE wms_wave ADD COLUMN strategy_id BIGINT;
-ALTER TABLE wms_wave ADD COLUMN strategy_code VARCHAR(32);
-ALTER TABLE wms_wave ADD COLUMN pack_strategy VARCHAR(32);
-ALTER TABLE wms_pick_task ADD COLUMN short_qty DECIMAL(18,3) DEFAULT 0;
 
 -- ===================== 盘点计划体系 =====================
 -- 盘点计划: DRAFT -> PENDING -> APPROVED -> EXECUTING -> COMPLETED / CANCELLED

@@ -135,6 +135,7 @@ class CountPlanFlowTest {
         assertEquals(0, locked.getAvailableQty().signum());
         assertThrows(BizException.class, () -> inventoryService.move(t0.getInventoryId(), q(1), "A-01-02-01", "T", "MOVE"));
         assertThrows(BizException.class, () -> inventoryService.adjust(t0.getInventoryId(), q(1), "x", "T"));
+        assertThrows(BizException.class, () -> inventoryService.deduct(t0.getInventoryId(), q(1), false, "T", "PICK"), "锁定库存不可扣减");
         ShipOrder o = new ShipOrder();
         o.setWarehouseCode("WH01");
         o.setOwnerCode("OWN01");
@@ -175,6 +176,10 @@ class CountPlanFlowTest {
         assertEquals(0, q(-1).compareTo(confirmed.getFinalDiff()));
 
         assertThrows(BizException.class, () -> planService.complete(p.getId()), "有差异但未生成调整单不能完成");
+        StockAdjust rejected = planService.generateAdjust(p.getId());
+        planService.approveAdjust(rejected.getId(), false, "no");
+        assertEquals("REJECTED", planService.requireAdjust(rejected.getId()).getStatus());
+        assertThrows(BizException.class, () -> planService.complete(p.getId()), "调整单被驳回不能完成");
         StockAdjust adj = planService.generateAdjust(p.getId());
         assertEquals("PENDING", adj.getStatus());
         assertEquals(1, adj.getLineCount());

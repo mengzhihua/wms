@@ -343,14 +343,7 @@ public class ShipOrderService {
             throw new BizException("箱数必须大于0");
         }
         if (cartonCode != null && !cartonCode.trim().isEmpty()) {
-            Carton carton = cartonMapper.selectOne(new LambdaQueryWrapper<Carton>().eq(Carton::getCode, cartonCode.trim()));
-            if (carton == null) {
-                throw new BizException("箱型不存在: " + cartonCode);
-            }
-            order.setCartonCode(carton.getCode());
-            if (carton.getItemCode() != null) {
-                consumePackaging(order, carton, packageCount);
-            }
+            order.setCartonCode(consumeCarton(order, cartonCode, packageCount).getCode());
         }
         order.setPackageCount(packageCount);
         order.setGrossWeight(grossWeight);
@@ -369,6 +362,19 @@ public class ShipOrderService {
     @Transactional
     public ShipOrder ship(Long orderId) {
         return ship(orderId, null, null);
+    }
+
+    /** 校验箱型并按箱数扣减其关联的包材库存 */
+    @Transactional
+    public Carton consumeCarton(ShipOrder order, String cartonCode, int count) {
+        Carton carton = cartonMapper.selectOne(new LambdaQueryWrapper<Carton>().eq(Carton::getCode, cartonCode.trim()));
+        if (carton == null) {
+            throw new BizException("箱型不存在: " + cartonCode);
+        }
+        if (carton.getItemCode() != null) {
+            consumePackaging(order, carton, count);
+        }
+        return carton;
     }
 
     private void consumePackaging(ShipOrder order, Carton carton, int count) {

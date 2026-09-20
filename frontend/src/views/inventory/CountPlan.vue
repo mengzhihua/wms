@@ -133,15 +133,15 @@
         </el-form-item>
         <el-form-item label="盘点类型" required>
           <el-radio-group v-model="form.type">
-            <el-radio-button v-for="(t, k) in TYPES" :key="k" :label="k">{{ t }}</el-radio-button>
+            <el-radio-button v-for="(t, k) in TYPES" :key="k" :value="k">{{ t }}</el-radio-button>
           </el-radio-group>
           <div class="hint">{{ TYPE_HINT[form.type] }}</div>
         </el-form-item>
         <el-form-item label="盘点范围">
           <el-radio-group v-model="form.scopeType">
-            <el-radio-button label="ALL">全仓</el-radio-button>
-            <el-radio-button label="ZONE">按库区</el-radio-button>
-            <el-radio-button label="ITEM">按物料</el-radio-button>
+            <el-radio-button value="ALL">全仓</el-radio-button>
+            <el-radio-button value="ZONE">按库区</el-radio-button>
+            <el-radio-button value="ITEM">按物料</el-radio-button>
           </el-radio-group>
         </el-form-item>
         <el-form-item v-if="form.scopeType === 'ZONE'" label="库区" required>
@@ -154,7 +154,7 @@
         </el-form-item>
         <el-form-item v-if="form.type === 'CYCLE'" label="ABC 等级">
           <el-checkbox-group v-model="abcList">
-            <el-checkbox label="A" /><el-checkbox label="B" /><el-checkbox label="C" />
+            <el-checkbox value="A" label="A" /><el-checkbox value="B" label="B" /><el-checkbox value="C" label="C" />
           </el-checkbox-group>
           <div class="hint">循环盘点仅盘选中等级的物料；不选则不按 ABC 过滤</div>
         </el-form-item>
@@ -178,8 +178,8 @@
         <el-form-item label="单号">{{ approveTarget.code }}</el-form-item>
         <el-form-item label="结果">
           <el-radio-group v-model="approveForm.pass">
-            <el-radio :label="true">通过</el-radio>
-            <el-radio :label="false">驳回</el-radio>
+            <el-radio :value="true">通过</el-radio>
+            <el-radio :value="false">驳回</el-radio>
           </el-radio-group>
         </el-form-item>
         <el-form-item label="意见"><el-input v-model="approveForm.opinion" type="textarea" :rows="2" /></el-form-item>
@@ -375,7 +375,7 @@ function scopeText(p) {
   else parts.push('全仓')
   if (p.abcClasses) parts.push(`ABC:${p.abcClasses}`)
   if (p.sinceDate) parts.push(`自 ${p.sinceDate}`)
-  if (p.samplePercent) parts.push(`抽 ${p.samplePercent}%`)
+  if (p.type === 'RANDOM' && p.samplePercent) parts.push(`抽 ${p.samplePercent}%`)
   return parts.join(' · ')
 }
 const diffClass = (d) => (d == null || Number(d) === 0 ? '' : Number(d) > 0 ? 'gain' : 'loss')

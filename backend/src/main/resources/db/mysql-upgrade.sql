@@ -1,4 +1,7 @@
 -- 已有 MySQL 库从旧版本升级时手工执行(每列执行一次; 列已存在报 1060 可忽略)。全新库直接由 schema.sql 建表, 无需本脚本。
+ALTER TABLE wms_asn ADD COLUMN cross_dock_order_code VARCHAR(32);
+ALTER TABLE wms_asn ADD COLUMN cross_dock_qty DECIMAL(18,3);
+ALTER TABLE wms_pick_task ADD COLUMN wave_id BIGINT;
 ALTER TABLE wms_item ADD COLUMN qc_required BOOLEAN DEFAULT FALSE;
 ALTER TABLE wms_asn ADD COLUMN customer_code VARCHAR(32);
 ALTER TABLE wms_asn ADD COLUMN qc_qty DECIMAL(18,3);

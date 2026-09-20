@@ -69,6 +69,9 @@ public class InventoryService {
                 .eq(expiry != null, Inventory::getExpiryDate, expiry)
                 .isNull(expiry == null, Inventory::getExpiryDate)
                 .last("LIMIT 1"));
+        if (inv != null) {
+            inv = tryLockInventory(inv.getId());
+        }
         if (inv == null) {
             inv = new Inventory();
             inv.setWarehouseCode(warehouse);
@@ -374,12 +377,18 @@ public class InventoryService {
     /** 当前事务内行锁读取(SELECT ... FOR UPDATE), 供扣减/移库/调整/盘点加锁等写操作串行化 */
     @Transactional
     public Inventory lockInventory(Long id) {
-        Inventory inv = inventoryMapper.selectOne(new LambdaQueryWrapper<Inventory>()
-                .eq(Inventory::getId, id).last("FOR UPDATE"));
+        Inventory inv = tryLockInventory(id);
         if (inv == null) {
             throw new BizException("库存记录不存在: " + id);
         }
         return inv;
+    }
+
+    /** 行锁读取, 记录已不存在(被并发扣减删除)时返回 null */
+    @Transactional
+    public Inventory tryLockInventory(Long id) {
+        return inventoryMapper.selectOne(new LambdaQueryWrapper<Inventory>()
+                .eq(Inventory::getId, id).last("FOR UPDATE"));
     }
 
     private void checkMixRules(Location target, Inventory src) {

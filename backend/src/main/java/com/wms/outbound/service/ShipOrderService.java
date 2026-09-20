@@ -386,9 +386,13 @@ public class ShipOrderService {
                 .and(w -> w.isNull(Inventory::getCountLock).or().eq(Inventory::getCountLock, false))
                 .orderByAsc(Inventory::getExpiryDate, Inventory::getReceiveDate, Inventory::getId));
         BigDecimal need = BigDecimal.valueOf(count);
-        for (Inventory inv : stock) {
+        for (Inventory candidate : stock) {
             if (need.signum() <= 0) {
                 break;
+            }
+            Inventory inv = inventoryService.tryLockInventory(candidate.getId());
+            if (inv == null || Boolean.TRUE.equals(inv.getCountLock()) || !"AVAILABLE".equals(inv.getStatus())) {
+                continue;
             }
             BigDecimal avail = inv.getQty().subtract(nz(inv.getAllocatedQty()));
             if (avail.signum() <= 0 || inv.getRefNo() != null && !inv.getRefNo().isEmpty()) {

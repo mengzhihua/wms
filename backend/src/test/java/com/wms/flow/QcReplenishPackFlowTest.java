@@ -13,6 +13,7 @@ import com.wms.inventory.entity.InventoryTxn;
 import com.wms.inventory.entity.ReplenishTask;
 import com.wms.inventory.mapper.InventoryMapper;
 import com.wms.inventory.mapper.InventoryTxnMapper;
+import com.wms.inventory.service.InventoryService;
 import com.wms.inventory.service.ReplenishService;
 import com.wms.outbound.entity.PickTask;
 import com.wms.outbound.entity.ShipOrder;
@@ -40,6 +41,8 @@ class QcReplenishPackFlowTest {
     ShipOrderService orderService;
     @Autowired
     ReplenishService replenishService;
+    @Autowired
+    InventoryService inventoryService;
     @Autowired
     InventoryMapper inventoryMapper;
     @Autowired
@@ -124,6 +127,30 @@ class QcReplenishPackFlowTest {
                 .eq(InventoryTxn::getRefNo, asn.getCode()).eq(InventoryTxn::getTxnType, "QC_REJECT"));
         assertEquals(1, rejects.size());
         assertEquals("system", rejects.get(0).getOperator());
+    }
+
+    /** 质检位已有同键可用库存时, 解冻合并后拒收扣减与上架任务应引用合并后的库存 */
+    @Test
+    void inspectFollowsMergedInventoryWhenSameKeyAvailableRowExists() {
+        Asn asn = receive(newAsn("PURCHASE", "SKU004", 10, null), 10, "LOT-QCM");
+        QcTask task = asnService.qcTasks(asn.getId(), "NEW").get(0);
+        Inventory held = inventoryMapper.selectById(task.getInventoryId());
+        Inventory twin = inventoryService.add(held.getWarehouseCode(), held.getLocationCode(), held.getOwnerCode(),
+                held.getItemCode(), held.getLotNo(), q(5), held.getExpiryDate(), held.getRefNo(), "RECEIVE", null);
+        assertNotEquals(held.getId(), twin.getId());
+
+        asnService.inspect(task.getId(), q(8), q(2), "破损");
+        assertNull(inventoryMapper.selectById(held.getId()));
+        Inventory merged = inventoryMapper.selectById(twin.getId());
+        assertEquals(0, q(13).compareTo(merged.getQty()));
+
+        List<PutawayTask> pa = asnService.tasks(asn.getId());
+        assertEquals(1, pa.size());
+        assertEquals(twin.getId(), pa.get(0).getInventoryId());
+        putawayAll(asn.getId());
+        assertEquals("CLOSED", asnService.load(asn.getId()).getStatus());
+        assertEquals(0, q(5).compareTo(inventoryMapper.selectById(twin.getId()).getQty()));
+        inventoryService.deduct(twin.getId(), q(5), false, "T", "ADJUST");
     }
 
     @Test

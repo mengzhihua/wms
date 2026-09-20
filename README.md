@@ -156,7 +156,7 @@ cd wms-1.0.0
 
 ### 3. 原生包（捆绑 JRE，不必装 Java）
 
-打 `v*` 标签后，GitHub Actions 分别在 Ubuntu / Windows / macOS 生成：
+合并到默认分支且便携包冒烟通过后，GitHub Actions 自动发布 GitHub Release（也可在 Actions 里手动 `workflow_dispatch`）。分别在 Ubuntu / Windows / macOS 生成：
 
 - `wms-1.0.0-linux-x64.zip` → `bin/wms`
 - `wms-1.0.0-windows-x64.zip` → 双击 `wms.exe`

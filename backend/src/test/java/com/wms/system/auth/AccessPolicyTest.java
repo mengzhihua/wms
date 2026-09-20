@@ -25,5 +25,8 @@ class AccessPolicyTest {
         assertTrue(AccessPolicy.allows("OPERATOR", "GET", "/api/basic/item/list"));
         assertFalse(AccessPolicy.allows("OPERATOR", "PUT", "/api/basic/item/1"));
         assertFalse(AccessPolicy.allows("OPERATOR", "POST", "/api/system/user"));
+        assertTrue(AccessPolicy.allows("OPERATOR", "POST", "/api/outbound/wave-strategy/run"));
+        assertFalse(AccessPolicy.allows("OPERATOR", "POST", "/api/outbound/wave-strategy"));
+        assertFalse(AccessPolicy.allows("OPERATOR", "POST", "/api/outbound/wave-strategy/1/toggle"));
     }
 }

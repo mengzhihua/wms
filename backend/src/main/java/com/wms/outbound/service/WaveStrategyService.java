@@ -223,7 +223,7 @@ public class WaveStrategyService {
     }
 
     /** 按最大订单数 / 波次 SKU 品项数 / 波次总件数拆波 */
-    static List<List<OrderProfile>> split(WaveStrategy s, List<OrderProfile> group) {
+    public static List<List<OrderProfile>> split(WaveStrategy s, List<OrderProfile> group) {
         List<OrderProfile> sorted = new ArrayList<>(group);
         sorted.sort(Comparator.comparing((OrderProfile p) -> p.getOrder().getPriority() == null ? 5 : p.getOrder().getPriority())
                 .thenComparing(p -> p.getOrder().getId()));
@@ -235,6 +235,11 @@ public class WaveStrategyService {
         Set<String> curItems = new HashSet<>();
         BigDecimal curQty = BigDecimal.ZERO;
         for (OrderProfile p : sorted) {
+            boolean oversized = (maxSku > 0 && p.getItems().size() > maxSku)
+                    || (maxQty.signum() > 0 && p.getQty().compareTo(maxQty) > 0);
+            if (oversized) {
+                continue;
+            }
             Set<String> merged = new HashSet<>(curItems);
             merged.addAll(p.getItems());
             boolean full = !cur.isEmpty() && (cur.size() >= maxOrders

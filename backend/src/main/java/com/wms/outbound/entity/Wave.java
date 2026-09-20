@@ -26,6 +26,7 @@ public class Wave extends BaseEntity {
     private String strategyCode;
     /** ONE_ORDER_ONE_PACKAGE / SPLIT_BY_WEIGHT */
     private String packStrategy;
+    private BigDecimal maxPackageWeight;
 
     @TableField(exist = false)
     private List<ShipOrder> orders;

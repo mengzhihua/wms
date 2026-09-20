@@ -7,7 +7,7 @@ import com.wms.system.entity.User;
  * <ul>
  *   <li>任何登录用户可读（GET）</li>
  *   <li>VIEWER 不可写</li>
- *   <li>OPERATOR 可做仓库作业，不可维护基础数据(/api/basic/**)与用户(/api/system/**)</li>
+ *   <li>OPERATOR 可做仓库作业，不可维护基础数据(/api/basic/**)、用户(/api/system/**)与波次策略配置(可执行 /run)</li>
  *   <li>ADMIN 无限制</li>
  * </ul>
  * /api/auth/** 属于登录用户自助操作（改密、登出），所有角色均可。
@@ -27,6 +27,9 @@ public final class AccessPolicy {
             return true;
         }
         if (User.OPERATOR.equals(role)) {
+            if (path.startsWith("/api/outbound/wave-strategy")) {
+                return path.equals("/api/outbound/wave-strategy/run");
+            }
             return !path.startsWith("/api/basic/") && !path.startsWith("/api/system/");
         }
         return false;

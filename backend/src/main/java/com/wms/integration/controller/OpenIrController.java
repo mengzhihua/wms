@@ -1,11 +1,16 @@
 package com.wms.integration.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.wms.basic.entity.Item;
+import com.wms.basic.mapper.ItemMapper;
 import com.wms.common.BizException;
 import com.wms.common.R;
 import com.wms.inventory.mapper.InventoryMapper;
 import com.wms.inventory.service.ReplenishService;
 import com.wms.inventory.entity.ReplenishTask;
 import com.wms.outbound.entity.ShipOrder;
+import com.wms.outbound.entity.ShipOrderLine;
+import com.wms.outbound.mapper.ShipOrderLineMapper;
 import com.wms.outbound.mapper.ShipOrderMapper;
 import com.wms.outbound.service.ShipOrderService;
 import lombok.Data;
@@ -18,11 +23,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** IR 控制塔开放指令：按出库单号/外部单号分配，按仓触发补货。 */
+/** IR 控制塔开放指令：按出库单号/外部单号分配，按仓/SKU 触发补货。 */
 @RestController
 @RequestMapping("/api/open/ir")
 @RequiredArgsConstructor
@@ -30,7 +36,9 @@ public class OpenIrController {
     private final ShipOrderService shipOrderService;
     private final ReplenishService replenishService;
     private final ShipOrderMapper shipOrderMapper;
+    private final ShipOrderLineMapper shipOrderLineMapper;
     private final InventoryMapper inventoryMapper;
+    private final ItemMapper itemMapper;
 
     @Data
     public static class AllocateReq {
@@ -43,14 +51,17 @@ public class OpenIrController {
     public static class ReplenishReq {
         private String warehouseCode;
         private String ownerCode;
+        private String sku;
         private String targetKey;
     }
 
     @GetMapping("/snapshots")
     public R<Map<String, Object>> snapshots() {
+        Map<Long, String> skuByOrderId = firstSkuByOrder();
         List<Map<String, Object>> outbound = new ArrayList<Map<String, Object>>();
         for (ShipOrder order : shipOrderMapper.selectList(null)) {
             Map<String, Object> row = new LinkedHashMap<String, Object>();
+            String sku = skuByOrderId.get(order.getId());
             row.put("code", order.getCode());
             row.put("orderNo", order.getCode());
             row.put("orderCode", order.getCode());
@@ -58,6 +69,9 @@ public class OpenIrController {
             row.put("sourceNo", order.getExternalNo());
             row.put("warehouseCode", order.getWarehouseCode());
             row.put("status", order.getStatus());
+            row.put("sku", sku);
+            row.put("skuCode", sku);
+            row.put("itemCode", sku);
             row.put("totalQty", order.getTotalQty());
             row.put("qty", order.getTotalQty());
             row.put("pickedQty", order.getPickedQty());
@@ -69,6 +83,7 @@ public class OpenIrController {
             row.put("shippedAt", order.getShippedAt());
             outbound.add(row);
         }
+        Map<String, BigDecimal> minStock = minStockByItem();
         List<Map<String, Object>> inventory = new ArrayList<Map<String, Object>>();
         for (Map<String, Object> summary : inventoryMapper.summaryByItem()) {
             Map<String, Object> row = new LinkedHashMap<String, Object>();
@@ -76,6 +91,8 @@ public class OpenIrController {
             Object qty = mapGet(summary, "qty", "qtyOnHand");
             Object reserved = mapGet(summary, "allocatedQty", "qtyReserved");
             Object available = mapGet(summary, "availableQty", "qtyAvailable");
+            BigDecimal safety = sku == null ? BigDecimal.ZERO
+                    : minStock.getOrDefault(String.valueOf(sku), BigDecimal.ZERO);
             row.put("warehouseCode", mapGet(summary, "warehouseCode"));
             row.put("sku", sku);
             row.put("skuCode", sku);
@@ -86,7 +103,8 @@ public class OpenIrController {
             row.put("reserved", reserved);
             row.put("qtyAvailable", available);
             row.put("available", available);
-            row.put("safetyQty", BigDecimal.ZERO);
+            row.put("safetyQty", safety);
+            row.put("minStock", safety);
             inventory.add(row);
         }
         Map<String, Object> payload = new LinkedHashMap<String, Object>();
@@ -111,7 +129,7 @@ public class OpenIrController {
         if (warehouse == null) {
             throw new BizException("warehouseCode 必填");
         }
-        return R.ok(replenishService.generate(toWmsWarehouse(warehouse), req.getOwnerCode()));
+        return R.ok(replenishService.generate(toWmsWarehouse(warehouse), req.getOwnerCode(), req.getSku()));
     }
 
     @PostMapping("/actions")
@@ -128,7 +146,8 @@ public class OpenIrController {
         if ("WMS_REPLENISH".equals(type)) {
             String warehouse = first(string(params.get("warehouseCode")), targetKey);
             return R.ok(replenishService.generate(toWmsWarehouse(warehouse),
-                    string(params.get("ownerCode"))));
+                    string(params.get("ownerCode")),
+                    first(string(params.get("sku")), string(params.get("itemCode")))));
         }
         throw new BizException("不支持的 IR 指令: " + type);
     }
@@ -147,6 +166,32 @@ public class OpenIrController {
             return "WH03";
         }
         return code;
+    }
+
+    private Map<Long, String> firstSkuByOrder() {
+        Map<Long, String> skuByOrderId = new LinkedHashMap<Long, String>();
+        List<ShipOrderLine> lines = shipOrderLineMapper.selectList(new LambdaQueryWrapper<ShipOrderLine>()
+                .orderByAsc(ShipOrderLine::getOrderId).orderByAsc(ShipOrderLine::getLineNo));
+        for (ShipOrderLine line : lines) {
+            if (line.getOrderId() == null || skuByOrderId.containsKey(line.getOrderId())) {
+                continue;
+            }
+            if (line.getItemCode() != null && !line.getItemCode().trim().isEmpty()) {
+                skuByOrderId.put(line.getOrderId(), line.getItemCode().trim());
+            }
+        }
+        return skuByOrderId;
+    }
+
+    private Map<String, BigDecimal> minStockByItem() {
+        Map<String, BigDecimal> minStock = new HashMap<String, BigDecimal>();
+        for (Item item : itemMapper.selectList(null)) {
+            if (item.getCode() == null) {
+                continue;
+            }
+            minStock.put(item.getCode(), item.getMinStock() == null ? BigDecimal.ZERO : item.getMinStock());
+        }
+        return minStock;
     }
 
     private static Object first(Object... values) {

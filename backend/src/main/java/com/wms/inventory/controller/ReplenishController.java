@@ -38,11 +38,12 @@ public class ReplenishController {
     public static class GenerateReq {
         private String warehouseCode;
         private String ownerCode;
+        private String sku;
     }
 
     @PostMapping("/generate")
     public R<List<ReplenishTask>> generate(@RequestBody GenerateReq req) {
-        return R.ok(service.generate(req.getWarehouseCode(), req.getOwnerCode()));
+        return R.ok(service.generate(req.getWarehouseCode(), req.getOwnerCode(), req.getSku()));
     }
 
     @Data

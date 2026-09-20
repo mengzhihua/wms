@@ -40,6 +40,12 @@ public class ReplenishService {
     /** 扫描仓库(可选货主)下所有设置了安全库存的物料，生成补货任务 */
     @Transactional
     public List<ReplenishTask> generate(String warehouse, String owner) {
+        return generate(warehouse, owner, null);
+    }
+
+    /** sku 非空时只对该物料生成补货任务，供 IR 按缺货 SKU 下发。 */
+    @Transactional
+    public List<ReplenishTask> generate(String warehouse, String owner, String sku) {
         if (warehouse == null || warehouse.isEmpty()) {
             throw new BizException("请选择仓库");
         }
@@ -48,6 +54,7 @@ public class ReplenishService {
                 .stream().collect(Collectors.toMap(Location::getCode, l -> l, (a, b) -> a));
         List<Item> items = itemMapper.selectList(new LambdaQueryWrapper<Item>()
                 .eq(owner != null && !owner.isEmpty(), Item::getOwnerCode, owner)
+                .eq(sku != null && !sku.trim().isEmpty(), Item::getCode, sku == null ? null : sku.trim())
                 .isNotNull(Item::getMinStock).gt(Item::getMinStock, 0).eq(Item::getStatus, 1));
         List<ReplenishTask> created = new ArrayList<>();
         for (Item item : items) {

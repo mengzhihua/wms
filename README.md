@@ -128,19 +128,41 @@ cd backend && mvn test   # 内存 H2：鉴权 API、角色策略、令牌 / 密�
 - **ABC 分析**：按周期内 `SHIP` 流水发运量降序累计，累计占比 < 70% 为 A、< 90% 为 B、其余 C；管理员可一键应用到物料 `abcClass`。
 - **计件效能**：基于库存流水 `operator` 按人 / 日统计收货、上架、拣货、发运、补货、质检拒收的数量与笔数。
 
-## 发布包（单 JAR 成品）
+## 发布包（开箱即用）
 
-把前端生产构建打进后端可执行 JAR，解压即可运行：
+前端生产构建打进 Spring Boot 可执行 JAR。三种用法：
+
+### 1. 服务端（任意已装 JDK 17 的机器）
+
+```bash
+java -jar wms-backend-1.0.0.jar --server.port=8082
+```
+
+Linux systemd 示例见发布包 `README.txt`。
+
+### 2. 便携包（需本机已装 Java）
 
 ```bash
 bash scripts/package-release.sh
 unzip release/wms-1.0.0.zip
 cd wms-1.0.0
-./start.sh
 ```
 
-浏览器访问 `http://127.0.0.1:8082`。默认账号（如启用登录）`admin / admin123`。
+| 系统 | 怎么用 |
+| --- | --- |
+| Linux | `./start.sh` |
+| macOS | 双击 `start.command`，或 `./start.sh` |
+| Windows | 双击 `start.bat` |
 
-十二套系统可同时启动，端口互不冲突：OMS 8081 / WMS 8082 / TMS 8083 / BMS 8084 / SAP 8085 / OA 8086 / SRM 8087 / BOM 8088 / INV 8089 / IR 8090 / CRM 8091 / DMS 8092。
+### 3. 原生包（捆绑 JRE，不必装 Java）
 
-打 GitHub Release：在默认分支合并后执行 `git tag v1.0.0 && git push origin v1.0.0`，Actions 会上传 zip。
+打 `v*` 标签后，GitHub Actions 分别在 Ubuntu / Windows / macOS 生成：
+
+- `wms-1.0.0-linux-x64.zip` → `bin/wms`
+- `wms-1.0.0-windows-x64.zip` → 双击 `wms.exe`
+- `wms-1.0.0-macos-x64.zip` → 双击 `wms.app`
+
+浏览器访问 `http://127.0.0.1:8082`。默认账号 `admin / admin123`。
+
+十二套系统可同时启动：OMS 8081 / WMS 8082 / TMS 8083 / BMS 8084 / SAP 8085 / OA 8086 / SRM 8087 / BOM 8088 / INV 8089 / IR 8090 / CRM 8091 / DMS 8092。
+

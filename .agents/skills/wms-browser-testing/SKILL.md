@@ -13,7 +13,7 @@ description: Run local WMS browser workflows with isolated H2 data and meaningfu
 
 # Browser assertions
 - Use actual receipt and putaway to create a known inventory quantity. Avoid running the complete smoke seed during an arithmetic-sensitive UI test unless its stock/order mutations are recorded.
-- Count-plan chain: draft -> submit -> approve -> generate tasks -> count -> recount rounds -> adjustment generation -> adjustment approval -> completion. Assert completion rejects pending tasks, pending recounts, and unapproved adjustments separately.
+- Count-plan chain: draft -> submit -> approve -> generate tasks -> count -> recount rounds. If a confirmed recount still differs, generate and approve an adjustment before completion; otherwise complete directly (adjustment generation is rejected when there is no final mismatch). Assert completion rejects pending tasks, pending recounts, and unapproved/rejected adjustments separately.
 - Do not infer a count lock from the stock availability label. Attempt a small move/adjustment and verify rejection, then verify the same operation is possible after deletion/cancellation/completion releases the lock.
 - Build strategy test orders with matching quantities and allocated stock, but no active wave. Preview must not create waves; re-execution should not rematch existing waved orders.
 - Package duplicate protection may be implemented by excluding PACKED orders from the PICKED-order selector. Record this as UI exclusion, not proof of direct API rejection.

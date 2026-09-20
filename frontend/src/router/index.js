@@ -30,7 +30,10 @@ export const menus = [
     children: [
       { path: 'order', name: '出库单', component: () => import('../views/outbound/ShipOrder.vue') },
       { path: 'pick', name: '拣货任务', component: () => import('../views/outbound/Pick.vue') },
-      { path: 'wave', name: '波次/播种', component: () => import('../views/outbound/Wave.vue') }
+      { path: 'wave', name: '波次/播种', component: () => import('../views/outbound/Wave.vue') },
+      { path: 'wave-strategy', name: '波次策略', component: () => import('../views/outbound/WaveStrategy.vue') },
+      { path: 'shortage', name: '缺货登记', component: () => import('../views/outbound/Shortage.vue') },
+      { path: 'package', name: '包裹管理', component: () => import('../views/outbound/Package.vue') }
     ]
   },
   {
@@ -40,7 +43,8 @@ export const menus = [
       { path: 'summary', name: '库存汇总', component: () => import('../views/inventory/Summary.vue') },
       { path: 'replenish', name: '补货任务', component: () => import('../views/inventory/Replenish.vue') },
       { path: 'serial', name: '序列号(SN)', component: () => import('../views/inventory/Serial.vue') },
-      { path: 'count', name: '盘点管理', component: () => import('../views/inventory/Count.vue') },
+      { path: 'count-plan', name: '盘点计划', component: () => import('../views/inventory/CountPlan.vue') },
+      { path: 'count', name: '盘点单(快捷)', component: () => import('../views/inventory/Count.vue') },
       { path: 'txn', name: '库存流水', component: () => import('../views/inventory/Txn.vue') }
     ]
   },

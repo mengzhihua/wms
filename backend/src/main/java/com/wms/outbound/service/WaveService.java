@@ -9,6 +9,7 @@ import com.wms.outbound.entity.ShipOrder;
 import com.wms.outbound.entity.SowTask;
 import com.wms.outbound.entity.Wave;
 import com.wms.outbound.entity.WavePickTask;
+import com.wms.outbound.entity.WaveStrategy;
 import com.wms.outbound.mapper.PickTaskMapper;
 import com.wms.outbound.mapper.ShipOrderMapper;
 import com.wms.outbound.mapper.SowTaskMapper;
@@ -52,6 +53,12 @@ public class WaveService {
 
     @Transactional
     public Wave create(String warehouse, List<Long> orderIds, String remark) {
+        return create(warehouse, orderIds, remark, null);
+    }
+
+    /** {@code strategy} 为空表示手工选单建波 */
+    @Transactional
+    public Wave create(String warehouse, List<Long> orderIds, String remark, WaveStrategy strategy) {
         if (orderIds == null || orderIds.isEmpty()) {
             throw new BizException("请选择出库单");
         }
@@ -93,6 +100,11 @@ public class WaveService {
         wave.setPickedQty(BigDecimal.ZERO);
         wave.setSowedQty(BigDecimal.ZERO);
         wave.setRemark(remark);
+        if (strategy != null) {
+            wave.setStrategyId(strategy.getId());
+            wave.setStrategyCode(strategy.getCode());
+            wave.setPackStrategy(strategy.getPackStrategy());
+        }
         waveMapper.insert(wave);
 
         // consolidate by inventory record (= location + item + lot)

@@ -1,33 +1,29 @@
 package com.wms.outbound.entity;
 
-import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.wms.common.BaseEntity;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.util.List;
 
 @Data
 @EqualsAndHashCode(callSuper = true)
-@TableName("wms_pick_task")
-public class PickTask extends BaseEntity {
-    private String code;
+@TableName("wms_shortage")
+public class Shortage extends BaseEntity {
+    private Long taskId;
     private Long orderId;
-    private Long orderLineId;
     private String orderCode;
+    private Long waveId;
     private String warehouseCode;
     private String ownerCode;
     private String itemCode;
     private String lotNo;
+    private String locationCode;
     private Long inventoryId;
-    private String fromLocation;
-    private String toLocation;
     private BigDecimal qty;
-    private BigDecimal pickedQty;
+    private String reason;
+    private String operator;
+    /** OPEN 待处理 / CLOSED 已处理 */
     private String status;
-    private Long waveId;
-    private BigDecimal shortQty;
 }

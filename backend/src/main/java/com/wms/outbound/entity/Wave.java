@@ -22,6 +22,10 @@ public class Wave extends BaseEntity {
     private BigDecimal pickedQty;
     private BigDecimal sowedQty;
     private String remark;
+    private Long strategyId;
+    private String strategyCode;
+    /** ONE_ORDER_ONE_PACKAGE / SPLIT_BY_WEIGHT */
+    private String packStrategy;
 
     @TableField(exist = false)
     private List<ShipOrder> orders;

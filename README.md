@@ -10,8 +10,8 @@
 | --- | --- |
 | 基础数据 | 仓库、库区、库位（类型 / ABC / 拣货顺序 / 混放规则）、货主、物料（批次 / 效期 / 安全库存 / 质检 / 序列号管理，CSV 导入导出）、供应商、客户、**包材 / 箱型**（尺寸、容积、承重，可关联包材 SKU） |
 | 入库管理 | 入库通知单 ASN、按行收货（批次 / 效期 / 收货库位 / SN 登记）、自动生成上架任务与推荐库位、上架确认、关闭收货、**收货质检放行 / 拒收**、**退货入库**（进质检位冻结）、**越库（ASN 绑定出库单，收货直接分拨到发货暂存）** |
-| 出库管理 | 出库单、库存分配（FEFO → FIFO，仅存储/拣货位，支持部分分配）、取消分配、拣货任务确认（含少拣释放）、**复核打包（箱型推荐、包材库存扣减、承运商 / 运单）**、发运（SN 物料需扫描序列号）、**波次总拣 + 播种（多单合并拣货、按播种位分拨、波次发运）** |
-| 库内管理 | 库存查询、库存汇总、库存流水（含 CSV 导出）、移库、库存调整、冻结 / 解冻、盘点（生成快照 → 录入 → 差异 → 过账）、**拣货位 Min/Max 补货**、**序列号 (SN/IMEI) 查询与追溯** |
+| 出库管理 | 出库单、库存分配（FEFO → FIFO，仅存储/拣货位，支持部分分配）、取消分配、拣货任务确认（含少拣释放）、**复核打包（箱型推荐、包材库存扣减、承运商 / 运单）**、发运（SN 物料需扫描序列号）、**波次总拣 + 播种（多单合并拣货、按播种位分拨、波次发运）**、**波次策略引擎（8 种预置策略按优先级自动成波 / 拆波、预览试跑）**、**缺货登记**、**包裹对象（一单一包 / 按重量拆箱 / 手工分箱、运单回填、拆包）** |
+| 库内管理 | 库存查询、库存汇总、库存流水（含 CSV 导出）、移库、库存调整、冻结 / 解冻、盘点（生成快照 → 录入 → 差异 → 过账）、**盘点计划体系（计划 → 审批 → 一库存一任务锁库 → 领取 / 指派 → 提交 → 多轮复盘 → 库存调整单审核 → 盘点报告；循环 / 动碰 / 随机 / 异动盘点）**、**拣货位 Min/Max 补货**、**序列号 (SN/IMEI) 查询与追溯** |
 | 报表 | 库龄、效期预警、作业 KPI、**ABC 动态分析（可一键应用到物料）**、**操作员节点计件效能** |
 | 工作台 | 库位使用率、库存总量、待办入库 / 上架 / 出库 / 拣货、最近流水、安全库存预警 |
 | 系统管理 | 登录 / 登出 / 修改密码，用户管理（ADMIN 管理员 / OPERATOR 作业员 / VIEWER 只读），操作日志审计，全部 API 需登录 |
@@ -88,7 +88,7 @@ scripts/smoke.sh
 ### 单元 / 集成测试
 
 ```bash
-cd backend && mvn test   # 内存 H2：鉴权 API、角色策略、令牌 / 密码哈希、波次播种与越库业务闭环
+cd backend && mvn test   # 内存 H2：鉴权 API、角色策略、令牌 / 密码哈希、波次播种与越库业务闭环、盘点计划闭环、波次策略 / 缺货 / 包裹闭环
 ```
 
 ## API 概览
@@ -109,6 +109,10 @@ cd backend && mvn test   # 内存 H2：鉴权 API、角色策略、令牌 / 密�
 | 报表 | `GET /api/report/aging`，`/expiry`，`/kpi`，`/abc`（warehouseCode, ownerCode, days），`/labor`（days, operator） |
 | 审计 | `GET /api/system/oplog/page` |
 | 盘点 | `POST /api/inventory/count`，`/{id}/submit`，`/{id}/post`，`/{id}/cancel`，`GET /{id}/lines` |
+| 盘点计划 | `GET /api/inventory/count-plan/page`，`/{id}`，`/{id}/report`，`/{id}/tasks`，`/{id}/recounts`；`POST /api/inventory/count-plan`，`/{id}/submit`，`/{id}/approve`，`/{id}/generate`，`/{id}/complete`，`/{id}/cancel`，`/task/{tid}/claim`、`/assign`、`/count`，`/recount/{rid}/count`、`/next-round`、`/confirm`，`/{id}/adjust`，`/adjust/{aid}/approve` |
+| 波次策略 | `GET /api/outbound/wave-strategy/list`；`POST /api/outbound/wave-strategy`，`/{id}/toggle`，`/run`（warehouseCode, strategyId 可空, dryRun） |
+| 缺货 | `GET /api/outbound/shortage/page`；`POST /api/outbound/shortage/task/{taskId}`，`/wave-task/{taskId}`，`/{id}/close` |
+| 包裹 | `GET /api/outbound/package/page`，`/{id}`，`/by-order/{orderId}`，`/by-wave/{waveId}`；`POST /api/outbound/package/build`，`/manual`，`/unpack/{orderId}`；`PUT /{id}/tracking` |
 | 工作台 | `GET /api/dashboard` |
 
 ## 业务规则要点
@@ -121,6 +125,10 @@ cd backend && mvn test   # 内存 H2：鉴权 API、角色策略、令牌 / 密�
 - **越库（Cross-Dock）**：ASN 填写 `crossDockOrderCode`（同仓同货主、未发运的出库单）后，收货时按物料 / 批次匹配出库单未分配需求，直接扣减收货暂存并写入 `STAGING_OUT`，生成已完成的 `XD` 拣货任务，出库单变为可发运；超出需求的数量仍走正常上架。
 - **波次 / 播种（Wave / Pick-to-Sort）**：选择同仓多张已分配出库单建波次，普通拣货任务按“库位 + 物料 + 批次”合并为总拣任务；总拣确认后数量按出库单优先级分摊到各单（少拣缺口自动释放），并按出库单生成带播种位的播种任务；全部播种完成后可整波发运。已入波次的任务不可在普通拣货页操作，出库单也不可取消分配，需先取消波次。
 - **盘点**：按仓库 / 库区生成账面快照，录入实盘后计算差异，过账时按差异写 `ADJUST` 流水。
+- **盘点计划**：`DRAFT → PENDING → APPROVED → EXECUTING → COMPLETED / CANCELLED`。审批通过后按范围（全仓 / 库区 / 物料 / ABC 等级 / 动碰日期 / 随机抽样比例）一条库存生成一条盘点任务并加 `count_lock`（锁定库存不可分配、移库、手工调整）；提交实盘有差异自动生成复盘任务（可多轮），确认不符后生成库存调整单，审核通过经 `InventoryService.adjust` 过账（盘后库存已变动则拒绝）；任务 / 复盘 / 调整单全部完成方可结束计划并释放锁定。
+- **波次策略**：策略含优先级、订单数 / 单据 SKU 数 / 单据件数上下限、波次 SKU 品项与总件数上限、按物料 / 货主 / 承运商分组、储区限制、尾单截止小时、打包策略。运行时按优先级扫描已分配（含部分分配）且未入波次的出库单，满足条件的分组成波并按上限自动拆分；手工建波次不受影响。
+- **缺货登记**：普通拣货 / 波次总拣确认时可登记缺货（缺货 + 实拣 ≤ 计划），系统按实拣走原拣货流程并记录缺货明细供查询、关闭。
+- **包裹**：波次播种完成或出库单 `PICKED` 后按策略建包（一单一包 / 按物料重量拆箱）或手工分箱，包裹编码 `SH+日期+序号`，可回填承运商 / 运单 / 重量；拆包回退到 `PICKED`，发运后包裹状态同步 `SHIPPED`。
 - **质检 / 退货**：物料 `qcRequired` 或 ASN 类型 `RETURN` 时，收货进入 `QC` 库位并冻结，生成质检任务；放行部分解冻并生成上架任务，拒收部分写 `QC_REJECT` 流水出库。
 - **序列号 (SN/IMEI)**：物料 `snControl` 时，收货必须逐一登记 SN（个数 = 数量，同货主唯一，在库 SN 不可重复收货）；发运必须扫描在库 SN 且每个物料数量与应发一致，发运后 SN 变为 `SHIPPED` 并记录出库单；退货收货可使已发运 SN 回库。
 - **箱型推荐 / 包材**：按订单已拣数量 × 物料体积 / 重量汇总，选择能容纳的最小箱型；单箱装不下时用最大箱型估算箱数。箱型关联包材 SKU 时，打包按箱数扣减包材库存（`PACK_CONSUME` 流水），不足报错。

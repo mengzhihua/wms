@@ -45,15 +45,21 @@ public class OpenIrControllerTest {
             }
         }
         assertNotNull(stuck, "应包含 IR 出库卡单");
+        assertTrue("SKU001".equals(stuck.path("sku").asText())
+                || "SKU001".equals(stuck.path("itemCode").asText()), "出库快照应带行 SKU");
         boolean sku001 = false;
+        boolean safety = false;
         for (JsonNode row : data.get("inventory")) {
             if ("SKU001".equals(row.path("sku").asText())
                     || "SKU001".equals(row.path("itemCode").asText())) {
                 sku001 = true;
-                break;
+                if (row.path("safetyQty").asDouble() > 0) {
+                    safety = true;
+                }
             }
         }
         assertTrue(sku001, "库存快照应含 SKU001");
+        assertTrue(safety, "库存快照 safetyQty 应取物料 min_stock");
 
         String status = stuck.path("status").asText();
         if ("NEW".equals(status) || "PART_ALLOCATED".equals(status)) {
@@ -65,5 +71,24 @@ public class OpenIrControllerTest {
                     .andExpect(jsonPath("$.code").value(0))
                     .andExpect(jsonPath("$.data.status").value("ALLOCATED"));
         }
+
+        mockMvc.perform(post("/api/open/ir/actions")
+                        .header("X-Api-Key", "test-open-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"type\":\"WMS_REPLENISH\",\"targetKey\":\"WH01\","
+                                + "\"params\":{\"warehouseCode\":\"WH01\",\"sku\":\"SKU001\"}}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        mockMvc.perform(post("/api/open/ir/actions")
+                        .header("X-Api-Key", "test-open-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"type\":\"WMS_REPLENISH\",\"targetKey\":\"WH-BJ\","
+                                + "\"params\":{\"warehouseCode\":\"WH-BJ\",\"fromWarehouseCode\":\"WH-SH\","
+                                + "\"sku\":\"SKU001\",\"qty\":5}}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data[0].status").value("DONE"))
+                .andExpect(jsonPath("$.data[0].itemCode").value("SKU001"));
     }
 }

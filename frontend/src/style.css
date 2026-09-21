@@ -2,7 +2,9 @@ html, body, #app { height: 100%; margin: 0; font-family: -apple-system, 'PingFan
 .page { padding: 16px; }
 .toolbar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
 .toolbar .el-input, .toolbar .el-select { width: 200px; }
-.card { background: #fff; border-radius: 6px; padding: 16px; }
+.card { background: #fff; border-radius: 6px; padding: 16px; overflow-x: auto; }
+.pager { display: flex; justify-content: flex-end; margin-top: 12px; }
+.el-table th.el-table__cell > .cell { white-space: nowrap; }
 .pager { display: flex; justify-content: flex-end; margin-top: 12px; }
 .stat { background: #fff; border-radius: 6px; padding: 16px; }
 .stat .label { color: #909399; font-size: 13px; }

@@ -48,7 +48,7 @@ wms:
     admin-password: ${WMS_ADMIN_PASSWORD:admin123}
   cors:
     # 允许跨域的前端来源，逗号分隔；前后端同源部署时可设为空
-    origins: ${WMS_CORS_ORIGINS:http://localhost:5173}
+    origins: ${WMS_CORS_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
   open:
     api-key: ${WMS_OPEN_API_KEY:wms-open-key}
 

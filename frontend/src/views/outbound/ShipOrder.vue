@@ -10,7 +10,7 @@
         <el-button v-if="canWrite()" type="success" @click="openForm()"><el-icon><Plus /></el-icon>新建出库单</el-button>
       </div>
 
-      <el-table :data="rows" v-loading="loading" border stripe size="small">
+      <el-table :data="rows" v-loading="loading" border stripe size="small" :fit="false" style="min-width: 1680px">
         <el-table-column prop="code" label="出库单号" width="190" />
         <el-table-column label="状态" width="90"><template #default="{ row }"><StatusTag :value="row.status" /></template></el-table-column>
         <el-table-column label="类型" width="90"><template #default="{ row }"><StatusTag :value="row.type" /></template></el-table-column>

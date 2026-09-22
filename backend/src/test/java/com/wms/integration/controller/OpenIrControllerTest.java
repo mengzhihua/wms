@@ -63,10 +63,26 @@ public class OpenIrControllerTest {
 
         String status = stuck.path("status").asText();
         if ("NEW".equals(status) || "PART_ALLOCATED".equals(status)) {
+            String alloc = "{\"type\":\"WMS_ALLOCATE\",\"targetKey\":\"SO-IR-STUCK\","
+                    + "\"idempotencyKey\":\"WMS-ALLOC-1\"}";
             mockMvc.perform(post("/api/open/ir/actions")
                             .header("X-Api-Key", "test-open-key")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"type\":\"WMS_ALLOCATE\",\"targetKey\":\"SO-IR-STUCK\"}"))
+                            .content(alloc))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value(0))
+                    .andExpect(jsonPath("$.data.status").value("ALLOCATED"));
+            mockMvc.perform(post("/api/open/ir/actions")
+                            .header("X-Api-Key", "test-open-key")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(alloc))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value(0))
+                    .andExpect(jsonPath("$.data.status").value("ALLOCATED"));
+            mockMvc.perform(post("/api/open/ir/allocate")
+                            .header("X-Api-Key", "test-open-key")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"orderCode\":\"SO-IR-STUCK\",\"idempotencyKey\":\"WMS-ALLOC-1\"}"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(0))
                     .andExpect(jsonPath("$.data.status").value("ALLOCATED"));

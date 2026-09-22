@@ -27,6 +27,8 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
 /** IR 控制塔开放指令：按出库单号/外部单号分配，按仓/SKU 触发补货。 */
 @RestController
@@ -39,12 +41,15 @@ public class OpenIrController {
     private final ShipOrderLineMapper shipOrderLineMapper;
     private final InventoryMapper inventoryMapper;
     private final ItemMapper itemMapper;
+    private final ConcurrentHashMap<String, Object> actionCache = new ConcurrentHashMap<String, Object>();
 
     @Data
     public static class AllocateReq {
         private String orderCode;
         private String externalNo;
         private String targetKey;
+        private String type;
+        private String idempotencyKey;
     }
 
     @Data
@@ -54,6 +59,8 @@ public class OpenIrController {
         private String ownerCode;
         private String sku;
         private String targetKey;
+        private String type;
+        private String idempotencyKey;
         private BigDecimal qty;
     }
 
@@ -122,21 +129,26 @@ public class OpenIrController {
         if (key == null) {
             throw new BizException("orderCode / externalNo 必填");
         }
-        return R.ok(shipOrderService.allocateByKey(key));
+        return R.ok((ShipOrder) executeOnce(cacheKey("WMS_ALLOCATE", key, req.getIdempotencyKey()),
+                () -> shipOrderService.allocateByKey(key)));
     }
 
     @PostMapping("/replenish")
+    @SuppressWarnings("unchecked")
     public R<List<ReplenishTask>> replenish(@RequestBody ReplenishReq req) {
         String warehouse = first(req.getWarehouseCode(), req.getTargetKey());
         if (warehouse == null) {
             throw new BizException("warehouseCode 必填");
         }
-        if (req.getFromWarehouseCode() != null && !req.getFromWarehouseCode().trim().isEmpty()) {
-            return R.ok(replenishService.transfer(
-                    toWmsWarehouse(req.getFromWarehouseCode()), toWmsWarehouse(warehouse),
-                    req.getSku(), req.getOwnerCode(), req.getQty()));
-        }
-        return R.ok(replenishService.generate(toWmsWarehouse(warehouse), req.getOwnerCode(), req.getSku()));
+        return R.ok((List<ReplenishTask>) executeOnce(
+                cacheKey("WMS_REPLENISH", warehouse, req.getIdempotencyKey()), () -> {
+                    if (req.getFromWarehouseCode() != null && !req.getFromWarehouseCode().trim().isEmpty()) {
+                        return replenishService.transfer(
+                                toWmsWarehouse(req.getFromWarehouseCode()), toWmsWarehouse(warehouse),
+                                req.getSku(), req.getOwnerCode(), req.getQty());
+                    }
+                    return replenishService.generate(toWmsWarehouse(warehouse), req.getOwnerCode(), req.getSku());
+                }));
     }
 
     @PostMapping("/actions")
@@ -146,24 +158,56 @@ public class OpenIrController {
         @SuppressWarnings("unchecked")
         Map<String, Object> params = body.get("params") instanceof Map
                 ? (Map<String, Object>) body.get("params") : new LinkedHashMap<String, Object>();
-        if ("WMS_ALLOCATE".equals(type)) {
-            return R.ok(shipOrderService.allocateByKey(first(
-                    string(params.get("orderCode")), targetKey)));
-        }
-        if ("WMS_REPLENISH".equals(type)) {
-            String warehouse = first(string(params.get("warehouseCode")), targetKey);
-            String from = first(string(params.get("fromWarehouseCode")),
-                    string(params.get("fromWarehouse")));
-            String sku = first(string(params.get("sku")), string(params.get("itemCode")));
-            if (from != null) {
-                return R.ok(replenishService.transfer(
-                        toWmsWarehouse(from), toWmsWarehouse(warehouse), sku,
-                        string(params.get("ownerCode")), decimal(params.get("qty"))));
+        return R.ok(executeOnce(cacheKey(type, targetKey, body.get("idempotencyKey")), () -> {
+            if ("WMS_ALLOCATE".equals(type)) {
+                return shipOrderService.allocateByKey(first(
+                        string(params.get("orderCode")), targetKey));
             }
-            return R.ok(replenishService.generate(toWmsWarehouse(warehouse),
-                    string(params.get("ownerCode")), sku));
+            if ("WMS_REPLENISH".equals(type)) {
+                String warehouse = first(string(params.get("warehouseCode")), targetKey);
+                String from = first(string(params.get("fromWarehouseCode")),
+                        string(params.get("fromWarehouse")));
+                String sku = first(string(params.get("sku")), string(params.get("itemCode")));
+                if (from != null) {
+                    return replenishService.transfer(
+                            toWmsWarehouse(from), toWmsWarehouse(warehouse), sku,
+                            string(params.get("ownerCode")), decimal(params.get("qty")));
+                }
+                return replenishService.generate(toWmsWarehouse(warehouse),
+                        string(params.get("ownerCode")), sku);
+            }
+            throw new BizException("不支持的 IR 指令: " + type);
+        }));
+    }
+
+    private Object executeOnce(String cacheKey, Supplier<Object> work) {
+        if (cacheKey == null) {
+            return work.get();
         }
-        throw new BizException("不支持的 IR 指令: " + type);
+        Object cached = actionCache.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+        synchronized (actionCache) {
+            cached = actionCache.get(cacheKey);
+            if (cached != null) {
+                return cached;
+            }
+            Object created = work.get();
+            actionCache.put(cacheKey, created);
+            return created;
+        }
+    }
+
+    private static String cacheKey(String type, String targetKey, Object idempotencyKey) {
+        if (idempotencyKey == null) {
+            return null;
+        }
+        String key = String.valueOf(idempotencyKey).trim();
+        if (key.isEmpty() || "null".equals(key)) {
+            return null;
+        }
+        return type + "|" + (targetKey == null ? "" : targetKey) + "|" + key;
     }
 
     static String toWmsWarehouse(String code) {

@@ -79,6 +79,13 @@ public class OpenIrControllerTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(0))
                     .andExpect(jsonPath("$.data.status").value("ALLOCATED"));
+            mockMvc.perform(post("/api/open/ir/allocate")
+                            .header("X-Api-Key", "test-open-key")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"orderCode\":\"SO-IR-STUCK\",\"idempotencyKey\":\"WMS-ALLOC-1\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value(0))
+                    .andExpect(jsonPath("$.data.status").value("ALLOCATED"));
         }
 
         mockMvc.perform(post("/api/open/ir/actions")

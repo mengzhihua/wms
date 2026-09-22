@@ -48,6 +48,8 @@ public class OpenIrController {
         private String orderCode;
         private String externalNo;
         private String targetKey;
+        private String type;
+        private String idempotencyKey;
     }
 
     @Data
@@ -57,6 +59,8 @@ public class OpenIrController {
         private String ownerCode;
         private String sku;
         private String targetKey;
+        private String type;
+        private String idempotencyKey;
         private BigDecimal qty;
     }
 
@@ -125,21 +129,26 @@ public class OpenIrController {
         if (key == null) {
             throw new BizException("orderCode / externalNo 必填");
         }
-        return R.ok(shipOrderService.allocateByKey(key));
+        return R.ok((ShipOrder) executeOnce(cacheKey("WMS_ALLOCATE", key, req.getIdempotencyKey()),
+                () -> shipOrderService.allocateByKey(key)));
     }
 
     @PostMapping("/replenish")
+    @SuppressWarnings("unchecked")
     public R<List<ReplenishTask>> replenish(@RequestBody ReplenishReq req) {
         String warehouse = first(req.getWarehouseCode(), req.getTargetKey());
         if (warehouse == null) {
             throw new BizException("warehouseCode 必填");
         }
-        if (req.getFromWarehouseCode() != null && !req.getFromWarehouseCode().trim().isEmpty()) {
-            return R.ok(replenishService.transfer(
-                    toWmsWarehouse(req.getFromWarehouseCode()), toWmsWarehouse(warehouse),
-                    req.getSku(), req.getOwnerCode(), req.getQty()));
-        }
-        return R.ok(replenishService.generate(toWmsWarehouse(warehouse), req.getOwnerCode(), req.getSku()));
+        return R.ok((List<ReplenishTask>) executeOnce(
+                cacheKey("WMS_REPLENISH", warehouse, req.getIdempotencyKey()), () -> {
+                    if (req.getFromWarehouseCode() != null && !req.getFromWarehouseCode().trim().isEmpty()) {
+                        return replenishService.transfer(
+                                toWmsWarehouse(req.getFromWarehouseCode()), toWmsWarehouse(warehouse),
+                                req.getSku(), req.getOwnerCode(), req.getQty());
+                    }
+                    return replenishService.generate(toWmsWarehouse(warehouse), req.getOwnerCode(), req.getSku());
+                }));
     }
 
     @PostMapping("/actions")

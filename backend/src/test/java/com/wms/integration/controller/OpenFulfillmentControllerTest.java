@@ -23,6 +23,8 @@ public class OpenFulfillmentControllerTest {
     @Test
     public void mapsShanghaiWarehouseAndReplaysSameOrder() throws Exception {
         assertEquals("WH01", OpenFulfillmentController.warehouse("WH-SH"));
+        assertEquals("WH01", com.wms.integration.client.HandlingFee.doc(
+                "OMS-SO-1", "WH01", new java.math.BigDecimal("2")).get("warehouseCode"));
         String body = "{\"orderNo\":\"OMS-SO-1\",\"warehouseCode\":\"WH-SH\",\"carrierCode\":\"SF\","
                 + "\"address\":\"上海\",\"items\":[{\"sku\":\"SKU001\",\"qty\":2}]}";
         mockMvc.perform(post("/api/open/outbound")

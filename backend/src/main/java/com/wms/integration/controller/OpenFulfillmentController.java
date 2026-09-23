@@ -2,6 +2,7 @@ package com.wms.integration.controller;
 
 import com.wms.common.BizException;
 import com.wms.common.R;
+import com.wms.integration.client.BmsHandlingClient;
 import com.wms.inbound.entity.Asn;
 import com.wms.inbound.entity.AsnLine;
 import com.wms.inbound.service.AsnService;
@@ -29,6 +30,7 @@ import java.util.Map;
 public class OpenFulfillmentController {
     private final ShipOrderService shipOrders;
     private final AsnService asns;
+    private final BmsHandlingClient bmsHandling;
 
     @PostMapping("/outbound")
     public R<ShipOrder> outbound(@RequestBody Map<String, Object> body) {
@@ -50,7 +52,9 @@ public class OpenFulfillmentController {
         order.setAddress(text(body.get("address")));
         order.setRemark("OMS " + orderNo);
         order.setLines(shipLines(body.get("items")));
-        return R.ok(shipOrders.create(order));
+        ShipOrder created = shipOrders.create(order);
+        bmsHandling.push(order);
+        return R.ok(created);
     }
 
     @PostMapping("/outbound/cancel")

@@ -44,8 +44,8 @@ public class ReplenishService {
     }
 
     /**
-     * IR 库存再平衡：从源仓扣可用库存，写入目标仓拣货位。
-     * 源仓=目标仓时退回仓内 Min/Max 补货。
+     * IR 库存再平衡：从源仓扣可用库存，先落到目标仓收货暂存位，任务停在 IN_TRANSIT。
+     * 确认后才从暂存位移到拣货位。源仓=目标仓时退回仓内 Min/Max 补货。
      */
     @Transactional
     public List<ReplenishTask> transfer(String fromWarehouse, String toWarehouse,
@@ -71,9 +71,13 @@ public class ReplenishService {
                 .stream()
                 .sorted(Comparator.comparing(Inventory::getAvailableQty).reversed())
                 .collect(Collectors.toList());
-        String toLoc = destLocation(toWarehouse);
-        if (toLoc == null) {
-            throw new BizException("目标仓没有可用库位: " + toWarehouse);
+        String staging = locationOfType(toWarehouse, "STAGING_IN");
+        if (staging == null) {
+            throw new BizException("目标仓没有收货暂存位: " + toWarehouse);
+        }
+        String pick = destLocation(toWarehouse);
+        if (pick == null) {
+            throw new BizException("目标仓没有可用拣货位: " + toWarehouse);
         }
         List<ReplenishTask> created = new ArrayList<>();
         for (Inventory src : sources) {
@@ -84,14 +88,14 @@ public class ReplenishService {
             if (q.signum() <= 0) {
                 continue;
             }
-            ReplenishTask task = insertTask(src, q, toLoc,
+            ReplenishTask task = insertTask(src, q, pick,
                     "IR 跨仓调拨 " + fromWarehouse + " -> " + toWarehouse);
-            task.setWarehouseCode(toWarehouse);
-            taskMapper.updateById(task);
             inventoryService.deduct(src.getId(), q, false, task.getCode(), "TRANSFER_OUT");
-            inventoryService.add(toWarehouse, toLoc, src.getOwnerCode(), src.getItemCode(),
+            Inventory received = inventoryService.add(toWarehouse, staging, src.getOwnerCode(), src.getItemCode(),
                     src.getLotNo(), q, src.getExpiryDate(), task.getCode(), "TRANSFER_IN", BigDecimal.ZERO);
-            task.setStatus("DONE");
+            task.setWarehouseCode(toWarehouse);
+            task.setInventoryId(received.getId());
+            task.setStatus("IN_TRANSIT");
             taskMapper.updateById(task);
             created.add(task);
             need = need.subtract(q);
@@ -180,6 +184,9 @@ public class ReplenishService {
     @Transactional
     public ReplenishTask confirm(Long taskId, String toLocation) {
         ReplenishTask t = require(taskId);
+        if ("IN_TRANSIT".equals(t.getStatus())) {
+            return confirmTransfer(t, toLocation);
+        }
         if (!"NEW".equals(t.getStatus())) {
             throw new BizException("任务已处理");
         }
@@ -207,6 +214,27 @@ public class ReplenishService {
     }
 
     // ------------------------------------------------------------------ helpers
+
+    private ReplenishTask confirmTransfer(ReplenishTask t, String toLocation) {
+        String target = toLocation != null && !toLocation.isEmpty() ? toLocation : t.getToLocation();
+        Location loc = inventoryService.requireLocation(t.getWarehouseCode(), target);
+        if (!"PICKING".equals(loc.getType())) {
+            throw new BizException("补货目标必须是拣货类型库位");
+        }
+        inventoryService.move(t.getInventoryId(), t.getQty(), target, t.getCode(), "TRANSFER_IN");
+        t.setToLocation(target);
+        t.setStatus("DONE");
+        taskMapper.updateById(t);
+        return t;
+    }
+
+    private String locationOfType(String warehouse, String type) {
+        List<Location> locs = locationMapper.selectList(new LambdaQueryWrapper<Location>()
+                .eq(Location::getWarehouseCode, warehouse)
+                .eq(Location::getType, type)
+                .eq(Location::getStatus, "AVAILABLE"));
+        return locs.isEmpty() ? null : locs.get(0).getCode();
+    }
 
     private String destLocation(String warehouse) {
         List<Location> locs = locationMapper.selectList(new LambdaQueryWrapper<Location>()

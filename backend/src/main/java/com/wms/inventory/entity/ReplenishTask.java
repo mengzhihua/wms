@@ -21,7 +21,7 @@ public class ReplenishTask extends BaseEntity {
     private String fromLocation;
     private String toLocation;
     private BigDecimal qty;
-    /** NEW / DONE / CANCELLED */
+    /** NEW / IN_TRANSIT / DONE / CANCELLED */
     private String status;
     private String remark;
 }

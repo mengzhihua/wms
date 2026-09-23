@@ -51,6 +51,14 @@ wms:
     origins: ${WMS_CORS_ORIGINS:http://localhost:5173}
   open:
     api-key: ${WMS_OPEN_API_KEY:wms-open-key}
+  bms:
+    mode: ${WMS_BMS_MODE:mock}
+    base-url: ${WMS_BMS_URL:http://localhost:8084}
+    api-key: ${WMS_BMS_API_KEY:bms-open-key}
+  srm:
+    mode: ${WMS_SRM_MODE:mock}
+    base-url: ${WMS_SRM_URL:http://localhost:8087}
+    api-key: ${WMS_SRM_API_KEY:srm-wms-key}
 
 ---
 spring:

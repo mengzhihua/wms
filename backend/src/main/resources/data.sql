@@ -11,6 +11,12 @@ WHERE NOT EXISTS (SELECT 1 FROM wms_zone WHERE warehouse_code='WH02' AND code='P
 INSERT INTO wms_location (warehouse_code, zone_code, code, type, abc_class, aisle, bay, level, pick_seq, mix_sku, mix_lot, status, created_at, updated_at)
 SELECT 'WH02', 'PCK', 'P-01-01', 'PICKING', 'A', '01', '01', '01', 5, TRUE, TRUE, 'AVAILABLE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wms_location WHERE warehouse_code='WH02' AND code='P-01-01');
+INSERT INTO wms_zone (warehouse_code, code, name, type, status, created_at, updated_at)
+SELECT 'WH02', 'RCV', '收货区', 'RECEIVING', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wms_zone WHERE warehouse_code='WH02' AND code='RCV');
+INSERT INTO wms_location (warehouse_code, zone_code, code, type, abc_class, aisle, bay, level, pick_seq, mix_sku, mix_lot, status, created_at, updated_at)
+SELECT 'WH02', 'RCV', 'RCV-01', 'STAGING_IN', NULL, NULL, NULL, NULL, 0, TRUE, TRUE, 'AVAILABLE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wms_location WHERE warehouse_code='WH02' AND code='RCV-01');
 
 INSERT INTO wms_zone (warehouse_code, code, name, type, status, created_at, updated_at)
 SELECT 'WH01', 'RCV', '收货区', 'RECEIVING', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP WHERE NOT EXISTS (SELECT 1 FROM wms_zone WHERE warehouse_code='WH01' AND code='RCV');
@@ -85,6 +91,9 @@ SELECT 'BOX-L', '大号纸箱', 60, 40, 40, 0.096, 30, 1, CURRENT_TIMESTAMP, CUR
 INSERT INTO wms_inventory (warehouse_code, location_code, owner_code, item_code, lot_no, qty, allocated_qty, status, created_at, updated_at)
 SELECT 'WH01', 'A-01-01-01', 'OWN01', 'SKU001', 'LOT-IR', 200, 0, 'AVAILABLE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wms_inventory WHERE warehouse_code='WH01' AND location_code='A-01-01-01' AND item_code='SKU001' AND lot_no='LOT-IR');
+INSERT INTO wms_inventory (warehouse_code, location_code, owner_code, item_code, lot_no, qty, allocated_qty, status, created_at, updated_at)
+SELECT 'WH01', 'A-01-01-02', 'OWN01', 'SKU003', 'LOT-XFER', 20, 0, 'AVAILABLE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wms_inventory WHERE warehouse_code='WH01' AND location_code='A-01-01-02' AND item_code='SKU003' AND lot_no='LOT-XFER');
 
 INSERT INTO wms_ship_order (code, warehouse_code, owner_code, customer_code, type, status, priority, expected_ship_date,
     external_no, carrier, address, total_qty, allocated_qty, picked_qty, shipped_qty, created_at, updated_at)

@@ -15,6 +15,7 @@ import com.wms.inbound.mapper.AsnMapper;
 import com.wms.inbound.mapper.PutawayTaskMapper;
 import com.wms.inbound.mapper.QcTaskMapper;
 import com.wms.inventory.entity.Inventory;
+import com.wms.integration.client.SrmReceiptClient;
 import com.wms.inventory.service.InventoryService;
 import com.wms.inventory.service.SerialService;
 import com.wms.outbound.service.CrossDockService;
@@ -22,6 +23,7 @@ import com.wms.system.auth.CurrentUser;
 import com.wms.system.entity.User;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,6 +49,9 @@ public class AsnService {
     private final CrossDockService crossDockService;
     private final SerialService serialService;
     private final CodeGenerator codeGenerator;
+
+    @Autowired(required = false)
+    private SrmReceiptClient srmReceiptClient;
 
     // ------------------------------------------------------------------ CRUD
 
@@ -100,6 +105,15 @@ public class AsnService {
         }
         db.setStatus("CANCELLED");
         asnMapper.updateById(db);
+    }
+
+    public Asn findByExternalNo(String externalNo) {
+        if (externalNo == null || externalNo.trim().isEmpty()) {
+            return null;
+        }
+        Asn asn = asnMapper.selectOne(new LambdaQueryWrapper<Asn>()
+                .eq(Asn::getExternalNo, externalNo.trim()).last("LIMIT 1"));
+        return asn == null ? null : load(asn.getId());
     }
 
     public Asn load(Long id) {
@@ -210,7 +224,11 @@ public class AsnService {
         asn.setStatus(complete ? "RECEIVED" : "RECEIVING");
         asnMapper.updateById(asn);
         refreshStatus(asnId);
-        return load(asnId);
+        Asn saved = load(asnId);
+        if (srmReceiptClient != null) {
+            srmReceiptClient.push(saved);
+        }
+        return saved;
     }
 
     private PutawayTask createPutawayTask(Asn asn, AsnLine line, String lot, Long inventoryId, String fromLoc, BigDecimal qty) {

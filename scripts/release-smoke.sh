@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
-PORT="${SERVER_PORT:-8082}"
+PORT="${SERVER_PORT:-8083}"
 cd "$DIR"
 export SKIP_BROWSER=1
 ./start.sh > "$DIR/smoke.log" 2>&1 &

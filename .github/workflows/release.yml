@@ -120,7 +120,7 @@ jobs:
           NPID=$!
           ok=0
           for _ in $(seq 1 90); do
-            if curl -sf "http://127.0.0.1:8082/" >/dev/null 2>&1; then ok=1; break; fi
+            if curl -sf "http://127.0.0.1:8083/" >/dev/null 2>&1; then ok=1; break; fi
             sleep 1
           done
           if [[ "$ok" != "1" ]]; then
@@ -129,7 +129,7 @@ jobs:
             kill "$NPID" 2>/dev/null || true
             exit 1
           fi
-          echo "NATIVE SMOKE OK wms :8082"
+          echo "NATIVE SMOKE OK wms :8083"
           kill "$NPID" 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         with:
@@ -173,5 +173,5 @@ jobs:
             - macOS Apple Silicon：`wms-1.0.0-macos-arm64.zip`
             - macOS Intel：`wms-1.0.0-macos-x64.zip`
 
-            浏览器 http://127.0.0.1:8082
+            浏览器 http://127.0.0.1:8083
             提交 `${{ github.sha }}`

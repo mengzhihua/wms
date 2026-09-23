@@ -2,7 +2,7 @@
 setlocal
 chcp 65001 >nul
 cd /d "%~dp0"
-if not defined SERVER_PORT set SERVER_PORT=8082
+if not defined SERVER_PORT set SERVER_PORT=8083
 where java >nul 2>nul
 if errorlevel 1 (
   echo [ERROR] 未检测到 Java。便携包 / 服务端部署需要 JDK 17：

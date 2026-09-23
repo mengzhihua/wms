@@ -252,13 +252,17 @@ public class ReportController {
                 x.put("operator", op);
                 x.put("date", d);
                 x.put("totalCount", 0L);
+                x.put("totalPay", BigDecimal.ZERO);
                 return x;
             });
             String type = String.valueOf(r.get("txn_type"));
             long c = ((Number) r.get("c")).longValue();
+            BigDecimal pay = LaborWage.pay(type, toDecimal(r.get("q")));
             m.put(type, r.get("q"));
             m.put(type + "_count", c);
+            m.put(type + "_pay", pay);
             m.put("totalCount", (Long) m.get("totalCount") + c);
+            m.put("totalPay", ((BigDecimal) m.get("totalPay")).add(pay));
         }
         return R.ok(new ArrayList<>(rows.values()));
     }

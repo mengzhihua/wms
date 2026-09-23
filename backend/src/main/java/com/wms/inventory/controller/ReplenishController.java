@@ -47,6 +47,23 @@ public class ReplenishController {
     }
 
     @Data
+    public static class TransferReq {
+        private String fromWarehouseCode;
+        private String warehouseCode;
+        private String ownerCode;
+        private String sku;
+        private BigDecimal qty;
+    }
+
+    /** 登录态跨仓调拨。源仓与目标仓相同则退回仓内 Min/Max 补货。 */
+    @PostMapping("/transfer")
+    public R<List<ReplenishTask>> transfer(@RequestBody TransferReq req) {
+        return R.ok(service.transfer(
+                req.getFromWarehouseCode(), req.getWarehouseCode(),
+                req.getSku(), req.getOwnerCode(), req.getQty()));
+    }
+
+    @Data
     public static class CreateReq {
         private Long inventoryId;
         private BigDecimal qty;

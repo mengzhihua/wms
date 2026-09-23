@@ -16,7 +16,7 @@ import com.wms.inventory.mapper.ReplenishTaskMapper;
 import com.wms.outbound.entity.PickTask;
 import com.wms.outbound.mapper.PickTaskMapper;
 import com.wms.report.LaborWage;
-import lombok.RequiredArgsConstructor
+import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;

@@ -137,6 +137,14 @@ cd backend && mvn test   # 内存 H2：鉴权 API、角色策略、令牌 / 密�
 - **ABC 分析**：按周期内 `SHIP` 流水发运量降序累计，累计占比 < 70% 为 A、< 90% 为 B、其余 C；管理员可一键应用到物料 `abcClass`。
 - **计件效能**：基于库存流水 `operator` 按人 / 日统计收货、上架、拣货、发运、补货、质检拒收的数量与笔数。
 
+## 控制塔对接
+
+出库快照、分配和补货见 [技术方案](docs/技术方案.md)。
+
+有 API Key 时，控制塔读 `GET /api/open/ir/snapshots`，写 `POST /api/open/ir/actions`，并回退 `/allocate`、`/replenish`。补货带了不同的源仓就走跨仓调拨。没有 Key 时，分配走 `/api/outbound/order/{id}/allocate`，跨仓走 `POST /api/inventory/replenish/transfer`。仓号 `WH-SH/BJ/GZ` 映成 `WH01/02/03`。
+
+发行包默认端口是 `8082`。控制塔种子里的 WMS 地址是 `8083`，同机联调时两边要改成同一个端口。
+
 ## 发布包（开箱即用）
 
 前端生产构建打进 Spring Boot 可执行 JAR。三种用法：

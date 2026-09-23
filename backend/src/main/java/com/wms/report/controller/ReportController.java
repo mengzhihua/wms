@@ -17,6 +17,7 @@ import com.wms.inventory.mapper.ReplenishTaskMapper;
 import com.wms.outbound.entity.PickTask;
 import com.wms.outbound.mapper.PickTaskMapper;
 import com.wms.report.LaborRateBook;
+import com.wms.report.LaborShift;
 import com.wms.report.LaborWage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -240,7 +241,7 @@ public class ReportController {
                                               @RequestParam(required = false) String operator) {
         LocalDateTime from = LocalDate.now().minusDays(days - 1L).atStartOfDay();
         StringBuilder sql = new StringBuilder(
-                "SELECT operator, warehouse_code, owner_code, CAST(created_at AS DATE) AS d, txn_type, SUM(qty) AS q, COUNT(*) AS c FROM wms_inventory_txn "
+                "SELECT operator, warehouse_code, owner_code, CAST(created_at AS DATE) AS d, HOUR(created_at) AS h, txn_type, SUM(qty) AS q, COUNT(*) AS c FROM wms_inventory_txn "
                         + "WHERE created_at >= ? AND txn_type IN ('RECEIVE','PUTAWAY','PICK','SHIP','REPLENISH','QC_REJECT')");
         List<Object> args = new ArrayList<>();
         args.add(from);
@@ -248,16 +249,20 @@ public class ReportController {
             sql.append(" AND operator = ?");
             args.add(operator);
         }
-        sql.append(" GROUP BY operator, warehouse_code, owner_code, CAST(created_at AS DATE), txn_type ORDER BY d DESC, operator");
+        sql.append(" GROUP BY operator, warehouse_code, owner_code, CAST(created_at AS DATE), HOUR(created_at), txn_type ORDER BY d DESC, operator");
         Map<String, BigDecimal> rates = loadLaborRates();
         Map<String, Map<String, Object>> rows = new LinkedHashMap<>();
         for (Map<String, Object> r : jdbc.queryForList(sql.toString(), args.toArray())) {
             String op = String.valueOf(r.get("operator"));
             String d = String.valueOf(r.get("d"));
-            Map<String, Object> m = rows.computeIfAbsent(op + "@" + d, k -> {
+            int hour = r.get("h") instanceof Number ? ((Number) r.get("h")).intValue() : 0;
+            String shift = LaborShift.code(hour);
+            Map<String, Object> m = rows.computeIfAbsent(op + "@" + d + "@" + shift, k -> {
                 Map<String, Object> x = new LinkedHashMap<>();
                 x.put("operator", op);
                 x.put("date", d);
+                x.put("shift", shift);
+                x.put("shiftLabel", LaborShift.label(shift));
                 x.put("totalCount", 0L);
                 x.put("totalPay", BigDecimal.ZERO);
                 return x;

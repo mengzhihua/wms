@@ -98,6 +98,7 @@
           <el-table :data="labor" border stripe size="small" v-loading="loading">
             <el-table-column prop="operator" label="操作员" width="120" />
             <el-table-column prop="date" label="日期" width="120" />
+            <el-table-column prop="shiftLabel" label="班次" width="80" />
             <el-table-column v-for="t in TXN" :key="t" :label="TXN_LABEL[t]" width="110"><template #default="{ row }">{{ row[t] || 0 }} <span class="muted">/ {{ row[t + '_count'] || 0 }} 笔</span></template></el-table-column>
             <el-table-column prop="totalCount" label="合计笔数" width="100" />
             <el-table-column label="计件金额" width="110"><template #default="{ row }">{{ Number(row.totalPay || 0).toFixed(2) }}</template></el-table-column>

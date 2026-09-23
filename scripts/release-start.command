@@ -2,7 +2,7 @@
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$DIR"
-PORT="${SERVER_PORT:-8082}"
+PORT="${SERVER_PORT:-8083}"
 
 if ! command -v java >/dev/null 2>&1; then
   echo "未检测到 Java。便携包 / 服务端部署需要 JDK 17："

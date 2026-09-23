@@ -102,6 +102,15 @@ public class AsnService {
         asnMapper.updateById(db);
     }
 
+    public Asn findByExternalNo(String externalNo) {
+        if (externalNo == null || externalNo.trim().isEmpty()) {
+            return null;
+        }
+        Asn asn = asnMapper.selectOne(new LambdaQueryWrapper<Asn>()
+                .eq(Asn::getExternalNo, externalNo.trim()).last("LIMIT 1"));
+        return asn == null ? null : load(asn.getId());
+    }
+
     public Asn load(Long id) {
         Asn asn = require(id);
         asn.setLines(lineMapper.selectList(new LambdaQueryWrapper<AsnLine>()

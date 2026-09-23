@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;
 import com.wms.basic.entity.Item;
 import com.wms.basic.mapper.ItemMapper;
+import com.wms.common.BizException;
 import com.wms.common.R;
 import com.wms.inbound.entity.PutawayTask;
 import com.wms.inbound.entity.QcTask;
@@ -15,9 +16,14 @@ import com.wms.inventory.mapper.InventoryMapper;
 import com.wms.inventory.mapper.ReplenishTaskMapper;
 import com.wms.outbound.entity.PickTask;
 import com.wms.outbound.mapper.PickTaskMapper;
+import com.wms.report.LaborRateBook;
+import com.wms.report.LaborWage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
+import lombok.Data;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -234,7 +240,7 @@ public class ReportController {
                                               @RequestParam(required = false) String operator) {
         LocalDateTime from = LocalDate.now().minusDays(days - 1L).atStartOfDay();
         StringBuilder sql = new StringBuilder(
-                "SELECT operator, CAST(created_at AS DATE) AS d, txn_type, SUM(qty) AS q, COUNT(*) AS c FROM wms_inventory_txn "
+                "SELECT operator, warehouse_code, owner_code, CAST(created_at AS DATE) AS d, txn_type, SUM(qty) AS q, COUNT(*) AS c FROM wms_inventory_txn "
                         + "WHERE created_at >= ? AND txn_type IN ('RECEIVE','PUTAWAY','PICK','SHIP','REPLENISH','QC_REJECT')");
         List<Object> args = new ArrayList<>();
         args.add(from);
@@ -242,7 +248,8 @@ public class ReportController {
             sql.append(" AND operator = ?");
             args.add(operator);
         }
-        sql.append(" GROUP BY operator, CAST(created_at AS DATE), txn_type ORDER BY d DESC, operator");
+        sql.append(" GROUP BY operator, warehouse_code, owner_code, CAST(created_at AS DATE), txn_type ORDER BY d DESC, operator");
+        Map<String, BigDecimal> rates = loadLaborRates();
         Map<String, Map<String, Object>> rows = new LinkedHashMap<>();
         for (Map<String, Object> r : jdbc.queryForList(sql.toString(), args.toArray())) {
             String op = String.valueOf(r.get("operator"));
@@ -252,15 +259,79 @@ public class ReportController {
                 x.put("operator", op);
                 x.put("date", d);
                 x.put("totalCount", 0L);
+                x.put("totalPay", BigDecimal.ZERO);
                 return x;
             });
             String type = String.valueOf(r.get("txn_type"));
             long c = ((Number) r.get("c")).longValue();
-            m.put(type, r.get("q"));
-            m.put(type + "_count", c);
+            BigDecimal qty = toDecimal(r.get("q"));
+            BigDecimal rate = LaborRateBook.resolve(rates, text(r.get("warehouse_code")), text(r.get("owner_code")), type);
+            BigDecimal pay = LaborRateBook.pay(rate, qty);
+            m.put(type, toDecimal(m.get(type)).add(qty));
+            m.put(type + "_count", longValue(m.get(type + "_count")) + c);
+            m.put(type + "_pay", toDecimal(m.get(type + "_pay")).add(pay));
             m.put("totalCount", (Long) m.get("totalCount") + c);
+            m.put("totalPay", ((BigDecimal) m.get("totalPay")).add(pay));
         }
         return R.ok(new ArrayList<>(rows.values()));
+    }
+
+    @GetMapping("/labor-rate")
+    public R<List<Map<String, Object>>> laborRateList() {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Map<String, Object> row : jdbc.queryForList(
+                "SELECT warehouse_code, owner_code, txn_type, rate FROM wms_labor_rate ORDER BY warehouse_code, owner_code, txn_type")) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("warehouseCode", row.get("warehouse_code"));
+            item.put("ownerCode", row.get("owner_code"));
+            item.put("txnType", row.get("txn_type"));
+            item.put("rate", row.get("rate"));
+            out.add(item);
+        }
+        return R.ok(out);
+    }
+
+    @Data
+    public static class LaborRateRequest {
+        private String warehouseCode;
+        private String ownerCode;
+        private String txnType;
+        private BigDecimal rate;
+    }
+
+    /** 按仓库和货主覆盖一个作业节点的单价。同一组合再次保存会替换。 */
+    @PostMapping("/labor-rate")
+    public R<LaborRateRequest> saveLaborRate(@RequestBody LaborRateRequest req) {
+        if (req == null || blank(req.getWarehouseCode()) || blank(req.getOwnerCode())) {
+            throw new BizException("仓库和货主必填");
+        }
+        if (LaborWage.rate(req.getTxnType()).signum() == 0) {
+            throw new BizException("作业节点只支持收货、上架、拣货、发运、补货、质检拒收");
+        }
+        if (req.getRate() == null || req.getRate().signum() < 0) {
+            throw new BizException("单价不能为负");
+        }
+        String warehouse = req.getWarehouseCode().trim();
+        String owner = req.getOwnerCode().trim();
+        String type = req.getTxnType().trim();
+        jdbc.update("DELETE FROM wms_labor_rate WHERE warehouse_code = ? AND owner_code = ? AND txn_type = ?", warehouse, owner, type);
+        jdbc.update(
+                "INSERT INTO wms_labor_rate(warehouse_code, owner_code, txn_type, rate, created_at, updated_at) VALUES (?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",
+                warehouse, owner, type, req.getRate());
+        req.setWarehouseCode(warehouse);
+        req.setOwnerCode(owner);
+        req.setTxnType(type);
+        return R.ok(req);
+    }
+
+    private Map<String, BigDecimal> loadLaborRates() {
+        Map<String, BigDecimal> rates = new LinkedHashMap<>();
+        for (Map<String, Object> row : jdbc.queryForList("SELECT warehouse_code, owner_code, txn_type, rate FROM wms_labor_rate")) {
+            rates.put(
+                    LaborRateBook.key(text(row.get("warehouse_code")), text(row.get("owner_code")), text(row.get("txn_type"))),
+                    toDecimal(row.get("rate")));
+        }
+        return rates;
     }
 
     // ------------------------------------------------------------------ helpers
@@ -269,6 +340,18 @@ public class ReportController {
         if (o == null) return BigDecimal.ZERO;
         if (o instanceof BigDecimal) return (BigDecimal) o;
         return new BigDecimal(o.toString());
+    }
+
+    private static long longValue(Object o) {
+        return o instanceof Number ? ((Number) o).longValue() : 0L;
+    }
+
+    private static String text(Object o) {
+        return o == null ? "" : String.valueOf(o);
+    }
+
+    private static boolean blank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 
     private List<Inventory> stock(String warehouse, String owner) {

@@ -664,3 +664,14 @@ CREATE TABLE IF NOT EXISTS wms_package_line (
   updated_at TIMESTAMP,
   INDEX idx_package_line (package_id)
 );
+
+CREATE TABLE IF NOT EXISTS wms_labor_rate (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  warehouse_code VARCHAR(32) NOT NULL,
+  owner_code VARCHAR(32) NOT NULL,
+  txn_type VARCHAR(16) NOT NULL,
+  rate DECIMAL(10,4) NOT NULL,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP,
+  CONSTRAINT uk_labor_rate UNIQUE (warehouse_code, owner_code, txn_type)
+);

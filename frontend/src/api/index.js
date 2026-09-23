@@ -130,7 +130,9 @@ export const report = {
   expiry: (params) => http.get('/report/expiry', { params }),
   kpi: (params) => http.get('/report/kpi', { params }),
   abc: (params) => http.get('/report/abc', { params }),
-  labor: (params) => http.get('/report/labor', { params })
+  labor: (params) => http.get('/report/labor', { params }),
+  laborRates: () => http.get('/report/labor-rate'),
+  saveLaborRate: (data) => http.post('/report/labor-rate', data)
 }
 
 /** 带 token 下载后端 CSV（使用 blob，避开 URL 中传 token） */

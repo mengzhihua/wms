@@ -75,11 +75,32 @@
         </el-tab-pane>
 
         <el-tab-pane label="计件效能" name="labor">
+          <div class="toolbar" style="margin-bottom: 8px">
+            <el-select v-model="rateForm.warehouseCode" placeholder="仓库" filterable clearable style="width: 160px">
+              <el-option v-for="w in options.warehouse || []" :key="w.value" :label="w.label" :value="w.value" />
+            </el-select>
+            <el-select v-model="rateForm.ownerCode" placeholder="货主" filterable clearable style="width: 160px">
+              <el-option v-for="o in options.owner || []" :key="o.value" :label="o.label" :value="o.value" />
+            </el-select>
+            <el-select v-model="rateForm.txnType" placeholder="作业节点" style="width: 120px">
+              <el-option v-for="t in TXN" :key="t" :label="TXN_LABEL[t]" :value="t" />
+            </el-select>
+            <el-input-number v-model="rateForm.rate" :min="0" :precision="2" :step="0.05" />
+            <el-button type="primary" :loading="saving" @click="saveRate">保存单价</el-button>
+            <span class="muted">未配置时仍用默认单价</span>
+          </div>
+          <el-table :data="rates" border size="small" style="margin-bottom: 8px" v-if="rates.length">
+            <el-table-column prop="warehouseCode" label="仓库" width="120" />
+            <el-table-column prop="ownerCode" label="货主" width="120" />
+            <el-table-column label="节点" width="100"><template #default="{ row }">{{ TXN_LABEL[row.txnType] || row.txnType }}</template></el-table-column>
+            <el-table-column prop="rate" label="单价" width="100" />
+          </el-table>
           <el-table :data="labor" border stripe size="small" v-loading="loading">
             <el-table-column prop="operator" label="操作员" width="120" />
             <el-table-column prop="date" label="日期" width="120" />
             <el-table-column v-for="t in TXN" :key="t" :label="TXN_LABEL[t]" width="110"><template #default="{ row }">{{ row[t] || 0 }} <span class="muted">/ {{ row[t + '_count'] || 0 }} 笔</span></template></el-table-column>
             <el-table-column prop="totalCount" label="合计笔数" width="100" />
+            <el-table-column label="计件金额" width="110"><template #default="{ row }">{{ Number(row.totalPay || 0).toFixed(2) }}</template></el-table-column>
           </el-table>
         </el-tab-pane>
       </el-tabs>
@@ -110,6 +131,8 @@ const aging = ref({})
 const expiry = ref([])
 const abc = ref([])
 const labor = ref([])
+const rates = ref([])
+const rateForm = reactive({ warehouseCode: '', ownerCode: '', txnType: 'PICK', rate: 0.5 })
 
 async function load() {
   loading.value = true
@@ -118,9 +141,24 @@ async function load() {
     else if (tab.value === 'aging') aging.value = await report.aging(query)
     else if (tab.value === 'expiry') expiry.value = await report.expiry(query)
     else if (tab.value === 'abc') abc.value = await report.abc(query)
-    else if (tab.value === 'labor') labor.value = await report.labor({ days: query.days })
+    else if (tab.value === 'labor') {
+      labor.value = await report.labor({ days: query.days })
+      rates.value = await report.laborRates()
+    }
   } finally {
     loading.value = false
+  }
+}
+
+async function saveRate() {
+  if (!rateForm.warehouseCode || !rateForm.ownerCode) return ElMessage.warning('请选择仓库和货主')
+  saving.value = true
+  try {
+    await report.saveLaborRate({ ...rateForm })
+    ElMessage.success('单价已保存')
+    if (tab.value === 'labor') await load()
+  } finally {
+    saving.value = false
   }
 }
 

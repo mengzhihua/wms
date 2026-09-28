@@ -2,6 +2,8 @@ package com.wms.integration.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.wms.inventory.service.ReplenishService;
+import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -26,6 +28,9 @@ public class OpenIrControllerTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private ReplenishService replenishService;
 
     @Test
     public void snapshotsIncludeStuckOutboundThenAllocate() throws Exception {
@@ -88,13 +93,17 @@ public class OpenIrControllerTest {
                     .andExpect(jsonPath("$.data.status").value("ALLOCATED"));
         }
 
-        mockMvc.perform(post("/api/open/ir/actions")
+        String replenished = mockMvc.perform(post("/api/open/ir/actions")
                         .header("X-Api-Key", "test-open-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"type\":\"WMS_REPLENISH\",\"targetKey\":\"WH01\","
                                 + "\"params\":{\"warehouseCode\":\"WH01\",\"sku\":\"SKU001\"}}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(0));
+                .andExpect(jsonPath("$.code").value(0))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        for (JsonNode task : objectMapper.readTree(replenished).path("data")) {
+            replenishService.cancel(task.path("id").asLong());
+        }
 
         mockMvc.perform(post("/api/open/ir/actions")
                         .header("X-Api-Key", "test-open-key")
@@ -104,7 +113,7 @@ public class OpenIrControllerTest {
                                 + "\"sku\":\"SKU001\",\"qty\":5}}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data[0].status").value("DONE"))
+                .andExpect(jsonPath("$.data[0].status").value("IN_TRANSIT"))
                 .andExpect(jsonPath("$.data[0].itemCode").value("SKU001"));
     }
 }

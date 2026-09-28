@@ -67,7 +67,7 @@ public class RoleService {
             throw new BizException("角色名称不能为空");
         }
         incoming.setCode(incoming.getCode().trim().toUpperCase());
-        if (incoming.getCode().length() > MAX_CODE_LENGTH) {
+        if (id == null && incoming.getCode().length() > MAX_CODE_LENGTH) {
             throw new BizException("角色编码不能超过 " + MAX_CODE_LENGTH + " 个字符");
         }
         Set<String> perms = parse(incoming.getPerms());

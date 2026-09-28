@@ -40,7 +40,7 @@
     <el-dialog v-model="visible" :title="(form.id ? '编辑' : '新增') + '角色'" width="600px" destroy-on-close>
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
         <el-form-item label="角色编码" prop="code">
-          <el-input v-model="form.code" :disabled="!!form.builtin" placeholder="如 APPROVER, 保存后自动转大写" />
+          <el-input v-model="form.code" :disabled="!!form.id" maxlength="16" placeholder="如 APPROVER, 最多 16 字符, 保存后自动转大写且不可修改" />
         </el-form-item>
         <el-form-item label="角色名称" prop="name"><el-input v-model="form.name" /></el-form-item>
         <el-form-item label="权限">

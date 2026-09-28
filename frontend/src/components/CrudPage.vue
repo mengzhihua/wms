@@ -72,7 +72,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute } from 'vue-router'
-import { canEditMaster, canWrite } from '../auth'
+import { canWritePath } from '../auth'
 
 const props = defineProps({
   title: { type: String, required: true },
@@ -86,7 +86,7 @@ const rows = ref([])
 const total = ref(0)
 const loading = ref(false)
 const route = useRoute()
-const editable = computed(() => (route.path.startsWith('/basic') || route.path.startsWith('/system') ? canEditMaster() : canWrite()))
+const editable = computed(() => canWritePath(route.path))
 const saving = ref(false)
 const visible = ref(false)
 const formRef = ref()

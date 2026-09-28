@@ -31,6 +31,11 @@ public class ShipOrder extends BaseEntity {
     private BigDecimal allocatedQty;
     private BigDecimal pickedQty;
     private BigDecimal shippedQty;
+    /** 审核状态, 见 com.wms.common.ApprovalStatus */
+    private String approvalStatus;
+    private String approvedBy;
+    private LocalDateTime approvedAt;
+    private String approvalRemark;
     private String trackingNo;
     private String cartonCode;
     private Integer packageCount;

@@ -91,6 +91,23 @@ public class ShipOrderController {
                 req == null ? null : req.getSerialNos()));
     }
 
+    @Data
+    public static class ApprovalReq {
+        private String remark;
+    }
+
+    /** 审核通过(需 outbound:approve) */
+    @PostMapping("/order/{id}/approve")
+    public R<ShipOrder> approve(@PathVariable Long id, @RequestBody(required = false) ApprovalReq req) {
+        return R.ok(service.approve(id, req == null ? null : req.getRemark()));
+    }
+
+    /** 驳回(需 outbound:approve) */
+    @PostMapping("/order/{id}/reject")
+    public R<ShipOrder> reject(@PathVariable Long id, @RequestBody(required = false) ApprovalReq req) {
+        return R.ok(service.reject(id, req == null ? null : req.getRemark()));
+    }
+
     @PostMapping("/order/{id}/cancel")
     public R<Void> cancel(@PathVariable Long id) {
         service.cancel(id);

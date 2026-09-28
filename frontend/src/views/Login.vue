@@ -42,7 +42,7 @@ async function submit() {
   loading.value = true
   try {
     const r = await authApi.login(form)
-    setAuth(r.token, r.user)
+    setAuth(r.token, r.user, r.perms || [])
     ElMessage.success(`欢迎，${r.user.realName || r.user.username}`)
     const redirect = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/') ? route.query.redirect : '/dashboard'
     router.replace(redirect)

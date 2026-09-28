@@ -68,11 +68,13 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { canWrite } from '../../auth'
+import { hasPerm, PERM } from '../../auth'
 import { ElMessage } from 'element-plus'
 import { inventory, downloadCsv } from '../../api'
 import { useOptions } from '../../composables/useOptions'
 import StatusTag from '../../components/StatusTag.vue'
+
+const canWrite = () => hasPerm(PERM.INVENTORY_WRITE)
 
 const { options } = useOptions(['warehouse', 'owner', 'location'])
 const rows = ref([])

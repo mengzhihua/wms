@@ -1,37 +1,56 @@
 package com.wms.system.auth;
 
-import com.wms.system.entity.User;
+import java.util.Set;
 
 /**
- * 角色访问策略（按 HTTP 方法 + 路径判断）：
+ * 基于权限码的访问策略（按 HTTP 方法 + 路径判断）：
  * <ul>
- *   <li>任何登录用户可读（GET）</li>
- *   <li>VIEWER 不可写</li>
- *   <li>OPERATOR 可做仓库作业，不可维护基础数据(/api/basic/**)、用户(/api/system/**)与波次策略配置(可执行 /run)</li>
- *   <li>ADMIN 无限制</li>
+ *   <li>任何登录用户可读（GET/HEAD）, /api/auth/** 自助操作所有人可用</li>
+ *   <li>写操作映射到所需权限码, 见 {@link #requiredPermission(String, String)}</li>
+ *   <li>持有 "*" 的角色不受限制</li>
  * </ul>
- * /api/auth/** 属于登录用户自助操作（改密、登出），所有角色均可。
  */
 public final class AccessPolicy {
     private AccessPolicy() {
     }
 
-    public static boolean allows(String role, String method, String path) {
-        if (User.ADMIN.equals(role)) {
+    public static boolean allows(Set<String> perms, String method, String path) {
+        String required = requiredPermission(method, path);
+        if (required == null) {
             return true;
         }
+        return perms != null && (perms.contains(Permission.ALL) || perms.contains(required));
+    }
+
+    /** 该请求所需权限码; 无需权限时返回 null */
+    public static String requiredPermission(String method, String path) {
         if ("GET".equalsIgnoreCase(method) || "HEAD".equalsIgnoreCase(method)) {
-            return true;
+            return null;
         }
         if (path.startsWith("/api/auth/")) {
-            return true;
+            return null;
         }
-        if (User.OPERATOR.equals(role)) {
-            if (path.startsWith("/api/outbound/wave-strategy")) {
-                return path.equals("/api/outbound/wave-strategy/run");
-            }
-            return !path.startsWith("/api/basic/") && !path.startsWith("/api/system/");
+        if (path.startsWith("/api/basic/")) {
+            return Permission.BASIC_WRITE;
         }
-        return false;
+        if (path.startsWith("/api/system/")) {
+            return Permission.SYSTEM_WRITE;
+        }
+        if (path.startsWith("/api/outbound/wave-strategy")) {
+            return path.equals("/api/outbound/wave-strategy/run") ? Permission.STRATEGY_RUN : Permission.STRATEGY_WRITE;
+        }
+        if (path.startsWith("/api/inbound/")) {
+            return path.endsWith("/approve") || path.endsWith("/reject") ? Permission.INBOUND_APPROVE : Permission.INBOUND_WRITE;
+        }
+        if (path.startsWith("/api/outbound/")) {
+            return path.endsWith("/approve") || path.endsWith("/reject") ? Permission.OUTBOUND_APPROVE : Permission.OUTBOUND_WRITE;
+        }
+        if (path.startsWith("/api/inventory/")) {
+            return Permission.INVENTORY_WRITE;
+        }
+        if (path.startsWith("/api/report/")) {
+            return Permission.REPORT_WRITE;
+        }
+        return Permission.ALL;
     }
 }

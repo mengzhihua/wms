@@ -127,9 +127,12 @@
 <script setup>
 import { onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { canWrite, isAdmin } from '../../auth'
+import { hasPerm, PERM } from '../../auth'
 import { outbound } from '../../api'
 import { useOptions } from '../../composables/useOptions'
+
+const canWrite = () => hasPerm(PERM.STRATEGY_RUN)
+const isAdmin = () => hasPerm(PERM.STRATEGY_WRITE)
 
 const PACK = { ONE_ORDER_ONE_PACKAGE: '一单一包', SPLIT_BY_WEIGHT: '按重量拆箱' }
 const { options } = useOptions(['warehouse'])

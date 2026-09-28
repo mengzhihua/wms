@@ -2,6 +2,7 @@ package com.wms.outbound.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.wms.basic.entity.Carton;
 import com.wms.basic.entity.Item;
 import com.wms.basic.entity.Location;
@@ -99,7 +100,12 @@ public class ShipOrderService {
         db.setRemark(order.getRemark());
         db.setTotalQty(sum(order.getLines()));
         db.setApprovalStatus(approvalService.initialStatus(db.getWarehouseCode()));
+        db.setApprovedBy(null);
+        db.setApprovedAt(null);
+        db.setApprovalRemark(null);
         orderMapper.updateById(db);
+        orderMapper.update(null, new LambdaUpdateWrapper<ShipOrder>().eq(ShipOrder::getId, id)
+                .set(ShipOrder::getApprovedBy, null).set(ShipOrder::getApprovedAt, null).set(ShipOrder::getApprovalRemark, null));
         lineMapper.delete(new LambdaQueryWrapper<ShipOrderLine>().eq(ShipOrderLine::getOrderId, id));
         db.setLines(order.getLines());
         saveLines(db);

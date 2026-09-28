@@ -1,6 +1,7 @@
 package com.wms.system.auth;
 
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * 基于权限码的访问策略（按 HTTP 方法 + 路径判断）：
@@ -11,6 +12,8 @@ import java.util.Set;
  * </ul>
  */
 public final class AccessPolicy {
+    private static final Pattern ASN_APPROVAL = Pattern.compile("/api/inbound/asn/\\d+/(approve|reject)");
+    private static final Pattern ORDER_APPROVAL = Pattern.compile("/api/outbound/order/\\d+/(approve|reject)");
     private AccessPolicy() {
     }
 
@@ -40,10 +43,10 @@ public final class AccessPolicy {
             return path.equals("/api/outbound/wave-strategy/run") ? Permission.STRATEGY_RUN : Permission.STRATEGY_WRITE;
         }
         if (path.startsWith("/api/inbound/")) {
-            return path.endsWith("/approve") || path.endsWith("/reject") ? Permission.INBOUND_APPROVE : Permission.INBOUND_WRITE;
+            return ASN_APPROVAL.matcher(path).matches() ? Permission.INBOUND_APPROVE : Permission.INBOUND_WRITE;
         }
         if (path.startsWith("/api/outbound/")) {
-            return path.endsWith("/approve") || path.endsWith("/reject") ? Permission.OUTBOUND_APPROVE : Permission.OUTBOUND_WRITE;
+            return ORDER_APPROVAL.matcher(path).matches() ? Permission.OUTBOUND_APPROVE : Permission.OUTBOUND_WRITE;
         }
         if (path.startsWith("/api/inventory/")) {
             return Permission.INVENTORY_WRITE;

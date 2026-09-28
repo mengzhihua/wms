@@ -116,7 +116,7 @@ import { report, basic } from '../../api'
 import { useOptions } from '../../composables/useOptions'
 import { hasPerm, PERM } from '../../auth'
 
-const isAdmin = () => hasPerm(PERM.REPORT_WRITE)
+const isAdmin = () => hasPerm(PERM.BASIC_WRITE)
 import StatusTag from '../../components/StatusTag.vue'
 
 const TXN = ['RECEIVE', 'PUTAWAY', 'PICK', 'SHIP', 'REPLENISH', 'QC_REJECT']

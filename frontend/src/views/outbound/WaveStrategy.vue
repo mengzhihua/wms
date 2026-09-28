@@ -11,8 +11,8 @@
         <template v-if="canWrite()">
           <el-button type="primary" :loading="running" @click="run(null, true)">预览匹配</el-button>
           <el-button type="success" :loading="running" @click="run(null, false)">执行全部启用策略</el-button>
-          <el-button v-if="isAdmin()" type="primary" plain @click="openForm()"><el-icon><Plus /></el-icon>新增策略</el-button>
         </template>
+        <el-button v-if="isAdmin()" type="primary" plain @click="openForm()"><el-icon><Plus /></el-icon>新增策略</el-button>
         <el-button @click="load"><el-icon><Refresh /></el-icon>刷新</el-button>
       </div>
 
@@ -42,14 +42,12 @@
         <el-table-column prop="remark" label="说明" min-width="160" show-overflow-tooltip />
         <el-table-column label="操作" width="190" fixed="right">
           <template #default="{ row }">
-            <template v-if="canWrite()">
-              <el-button link type="primary" size="small" @click="run(row.id, false)">执行</el-button>
-              <template v-if="isAdmin()">
-                <el-button link size="small" @click="openForm(row)">编辑</el-button>
-                <el-popconfirm title="删除该策略?" @confirm="remove(row)">
-                  <template #reference><el-button link type="danger" size="small">删除</el-button></template>
-                </el-popconfirm>
-              </template>
+            <el-button v-if="canWrite()" link type="primary" size="small" @click="run(row.id, false)">执行</el-button>
+            <template v-if="isAdmin()">
+              <el-button link size="small" @click="openForm(row)">编辑</el-button>
+              <el-popconfirm title="删除该策略?" @confirm="remove(row)">
+                <template #reference><el-button link type="danger" size="small">删除</el-button></template>
+              </el-popconfirm>
             </template>
           </template>
         </el-table-column>

@@ -24,6 +24,8 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class RoleService {
+    /** 与 wms_user.role 列宽一致 */
+    public static final int MAX_CODE_LENGTH = 16;
     private final RoleMapper roleMapper;
     private final UserMapper userMapper;
     private final Map<String, Set<String>> cache = new ConcurrentHashMap<>();
@@ -65,6 +67,9 @@ public class RoleService {
             throw new BizException("角色名称不能为空");
         }
         incoming.setCode(incoming.getCode().trim().toUpperCase());
+        if (incoming.getCode().length() > MAX_CODE_LENGTH) {
+            throw new BizException("角色编码不能超过 " + MAX_CODE_LENGTH + " 个字符");
+        }
         Set<String> perms = parse(incoming.getPerms());
         for (String p : perms) {
             if (!Permission.isKnown(p)) {
@@ -85,10 +90,10 @@ public class RoleService {
             roleMapper.insert(incoming);
         } else {
             Role db = require(id);
+            if (!db.getCode().equals(incoming.getCode())) {
+                throw new BizException("角色编码不可修改");
+            }
             if (Boolean.TRUE.equals(db.getBuiltin())) {
-                if (!db.getCode().equals(incoming.getCode())) {
-                    throw new BizException("内置角色不可修改编码");
-                }
                 if (User.ADMIN.equals(db.getCode())) {
                     perms = Collections.singleton(Permission.ALL);
                     incoming.setStatus(1);

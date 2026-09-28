@@ -2,6 +2,7 @@ package com.wms.outbound.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.wms.basic.entity.Location;
+import com.wms.basic.service.ApprovalService;
 import com.wms.common.BizException;
 import com.wms.common.CodeGenerator;
 import com.wms.inventory.entity.Inventory;
@@ -35,6 +36,7 @@ public class CrossDockService {
     private final PickTaskMapper taskMapper;
     private final InventoryService inventoryService;
     private final CodeGenerator codeGenerator;
+    private final ApprovalService approvalService;
 
     /** Validate that the order can act as a cross-dock target for the ASN. */
     public ShipOrder requireTarget(String orderCode, String warehouse, String owner) {
@@ -48,6 +50,7 @@ public class CrossDockService {
         if (!OPEN.contains(order.getStatus())) {
             throw new BizException("越库出库单 " + orderCode + " 状态 " + order.getStatus() + " 不可越库");
         }
+        approvalService.requireReleased("越库出库单", order.getCode(), order.getApprovalStatus());
         return order;
     }
 

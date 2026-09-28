@@ -25,9 +25,12 @@
         <el-table-column prop="pickedQty" label="已拣货" width="80" />
         <el-table-column prop="shippedQty" label="已发运" width="80" />
         <el-table-column prop="trackingNo" label="运单号" width="130" show-overflow-tooltip />
-        <el-table-column label="操作" width="320" fixed="right">
+        <el-table-column label="审核" width="90"><template #default="{ row }"><el-tag v-if="row.approvalStatus && row.approvalStatus !== 'NONE'" :type="APPROVAL_TYPE[row.approvalStatus]" size="small">{{ APPROVAL_LABEL[row.approvalStatus] }}</el-tag><span v-else style="color: #909399">免审</span></template></el-table-column>
+        <el-table-column label="操作" width="360" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="openDetail(row)">详情</el-button>
+            <el-button v-if="canApprove() && row.approvalStatus === 'PENDING'" link type="success" size="small" @click="approve(row)">审核</el-button>
+            <el-button v-if="canApprove() && row.approvalStatus === 'PENDING'" link type="danger" size="small" @click="reject(row)">驳回</el-button>
             <el-button v-if="canWrite() && row.status === 'NEW'" link type="primary" size="small" @click="openForm(row)">编辑</el-button>
             <el-button v-if="canWrite() && ['NEW', 'PART_ALLOCATED'].includes(row.status)" link type="success" size="small" @click="act(outbound.allocate, row, '分配完成')">分配</el-button>
             <el-button v-if="canWrite() && ['ALLOCATED', 'PART_ALLOCATED'].includes(row.status)" link type="warning" size="small" @click="act(outbound.deallocate, row, '已取消分配')">取消分配</el-button>
@@ -161,11 +164,14 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { canWrite } from '../../auth'
-import { ElMessage } from 'element-plus'
+import { APPROVAL_LABEL, APPROVAL_TYPE, hasPerm, PERM } from '../../auth'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { outbound } from '../../api'
 import { useOptions } from '../../composables/useOptions'
 import StatusTag from '../../components/StatusTag.vue'
+
+const canWrite = () => hasPerm(PERM.OUTBOUND_WRITE)
+const canApprove = () => hasPerm(PERM.OUTBOUND_APPROVE)
 
 const STATUSES = ['NEW', 'ALLOCATED', 'PART_ALLOCATED', 'PICKING', 'PICKED', 'PACKED', 'SHIPPED', 'CANCELLED']
 const { options } = useOptions(['warehouse', 'owner', 'customer', 'item'])
@@ -279,4 +285,20 @@ async function openDetail(row) {
 }
 
 onMounted(load)
+
+async function approve(row) {
+  const { value } = await ElMessageBox.prompt('审核备注（可选）', '审核通过 ' + row.code, { inputPlaceholder: '备注', confirmButtonText: '通过' }).catch(() => ({}))
+  if (value === undefined) return
+  await outbound.approve(row.id, value)
+  ElMessage.success('已审核')
+  load()
+}
+
+async function reject(row) {
+  const { value } = await ElMessageBox.prompt('驳回原因', '驳回 ' + row.code, { inputPattern: /\S+/, inputErrorMessage: '请填写驳回原因', confirmButtonText: '驳回' }).catch(() => ({}))
+  if (value === undefined) return
+  await outbound.reject(row.id, value)
+  ElMessage.warning('已驳回')
+  load()
+}
 </script>

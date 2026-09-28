@@ -8,6 +8,7 @@ import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
@@ -33,6 +34,11 @@ public class Asn extends BaseEntity {
     private String customerCode;
     private BigDecimal qcQty;
     private BigDecimal rejectedQty;
+    /** 审核状态, 见 com.wms.common.ApprovalStatus */
+    private String approvalStatus;
+    private String approvedBy;
+    private LocalDateTime approvedAt;
+    private String approvalRemark;
 
     @TableField(exist = false)
     private List<AsnLine> lines;

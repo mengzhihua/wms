@@ -50,12 +50,14 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { canWrite } from '../../auth'
+import { hasPerm, PERM } from '../../auth'
 import { ElMessage } from 'element-plus'
 import { inbound } from '../../api'
 import { useOptions } from '../../composables/useOptions'
 import StatusTag from '../../components/StatusTag.vue'
 import { fmt } from '../../utils'
+
+const canWrite = () => hasPerm(PERM.INBOUND_WRITE)
 
 const { options } = useOptions(['location'])
 const rows = ref([])

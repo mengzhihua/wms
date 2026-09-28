@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.wms.basic.entity.Item;
 import com.wms.basic.entity.Location;
 import com.wms.basic.mapper.ItemMapper;
+import com.wms.basic.service.ApprovalService;
+import com.wms.common.ApprovalStatus;
 import com.wms.common.BizException;
 import com.wms.common.CodeGenerator;
 import com.wms.inbound.entity.Asn;
@@ -49,6 +51,7 @@ public class AsnService {
     private final CrossDockService crossDockService;
     private final SerialService serialService;
     private final CodeGenerator codeGenerator;
+    private final ApprovalService approvalService;
 
     @Autowired(required = false)
     private SrmReceiptClient srmReceiptClient;
@@ -67,6 +70,10 @@ public class AsnService {
         asn.setQcQty(BigDecimal.ZERO);
         asn.setRejectedQty(BigDecimal.ZERO);
         asn.setCrossDockOrderCode(blankToNull(asn.getCrossDockOrderCode()));
+        asn.setApprovalStatus(approvalService.initialStatus(asn.getWarehouseCode()));
+        asn.setApprovedBy(null);
+        asn.setApprovedAt(null);
+        asn.setApprovalRemark(null);
         asn.setTotalQty(asn.getLines().stream().map(AsnLine::getExpectedQty).reduce(BigDecimal.ZERO, BigDecimal::add));
         asnMapper.insert(asn);
         saveLines(asn);
@@ -90,6 +97,7 @@ public class AsnService {
         db.setRemark(asn.getRemark());
         db.setCrossDockOrderCode(blankToNull(asn.getCrossDockOrderCode()));
         db.setTotalQty(asn.getLines().stream().map(AsnLine::getExpectedQty).reduce(BigDecimal.ZERO, BigDecimal::add));
+        db.setApprovalStatus(approvalService.initialStatus(db.getWarehouseCode()));
         asnMapper.updateById(db);
         lineMapper.delete(new LambdaQueryWrapper<AsnLine>().eq(AsnLine::getAsnId, id));
         db.setLines(asn.getLines());
@@ -105,6 +113,32 @@ public class AsnService {
         }
         db.setStatus("CANCELLED");
         asnMapper.updateById(db);
+    }
+
+    /** 审核通过: PENDING -> APPROVED */
+    @Transactional
+    public Asn approve(Long id, String remark) {
+        Asn db = require(id);
+        String by = approvalService.requirePending("入库单", db.getCode(), db.getApprovalStatus());
+        db.setApprovalStatus(ApprovalStatus.APPROVED);
+        db.setApprovedBy(by);
+        db.setApprovedAt(approvalService.now());
+        db.setApprovalRemark(remark);
+        asnMapper.updateById(db);
+        return load(id);
+    }
+
+    /** 驳回: PENDING -> REJECTED, 修改后重新进入 PENDING */
+    @Transactional
+    public Asn reject(Long id, String remark) {
+        Asn db = require(id);
+        String by = approvalService.requirePending("入库单", db.getCode(), db.getApprovalStatus());
+        db.setApprovalStatus(ApprovalStatus.REJECTED);
+        db.setApprovedBy(by);
+        db.setApprovedAt(approvalService.now());
+        db.setApprovalRemark(remark);
+        asnMapper.updateById(db);
+        return load(id);
     }
 
     public Asn findByExternalNo(String externalNo) {
@@ -143,6 +177,7 @@ public class AsnService {
         if (!"NEW".equals(asn.getStatus()) && !"RECEIVING".equals(asn.getStatus())) {
             throw new BizException("入库单状态 " + asn.getStatus() + " 不可收货");
         }
+        approvalService.requireReleased("入库单", asn.getCode(), asn.getApprovalStatus());
         if (receipts == null || receipts.isEmpty()) {
             throw new BizException("收货明细为空");
         }

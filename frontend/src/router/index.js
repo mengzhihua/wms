@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Layout from '../layout/Layout.vue'
-import { auth, isAdmin } from '../auth'
+import { auth, hasPerm, PERM } from '../auth'
 
 export const menus = [
   { path: '/dashboard', name: '工作台', icon: 'Odometer', component: () => import('../views/Dashboard.vue') },
@@ -50,16 +50,17 @@ export const menus = [
   },
   { path: '/report', name: '报表分析', icon: 'DataAnalysis', component: () => import('../views/report/Report.vue') },
   {
-    path: '/system', name: '系统管理', icon: 'Tools', adminOnly: true,
+    path: '/system', name: '系统管理', icon: 'Tools', perm: PERM.SYSTEM_WRITE,
     children: [
       { path: 'user', name: '用户管理', component: () => import('../views/system/User.vue') },
+      { path: 'role', name: '角色权限', component: () => import('../views/system/Role.vue') },
       { path: 'oplog', name: '操作日志', component: () => import('../views/system/OpLog.vue') }
     ]
   }
 ]
 
-/** 当前用户可见菜单（adminOnly 菜单仅管理员可见；后端同样做了鉴权） */
-export const visibleMenus = () => menus.filter((m) => !m.adminOnly || isAdmin())
+/** 当前用户可见菜单（perm 菜单需持有对应权限码；后端同样做了鉴权） */
+export const visibleMenus = () => menus.filter((m) => !m.perm || hasPerm(m.perm))
 
 const routes = [
   { path: '/login', name: '登录', component: () => import('../views/Login.vue') },
@@ -80,7 +81,7 @@ const router = createRouter({ history: createWebHistory(), routes })
 router.beforeEach((to) => {
   if (to.path === '/login') return auth.token ? '/dashboard' : true
   if (!auth.token) return { path: '/login', query: { redirect: to.fullPath } }
-  if (to.path.startsWith('/system') && !isAdmin()) return '/dashboard'
+  if (to.path.startsWith('/system') && !hasPerm(PERM.SYSTEM_WRITE)) return '/dashboard'
   return true
 })
 

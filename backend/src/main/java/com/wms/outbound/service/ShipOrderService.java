@@ -7,6 +7,8 @@ import com.wms.basic.entity.Item;
 import com.wms.basic.entity.Location;
 import com.wms.basic.mapper.CartonMapper;
 import com.wms.basic.mapper.ItemMapper;
+import com.wms.basic.service.ApprovalService;
+import com.wms.common.ApprovalStatus;
 import com.wms.common.BizException;
 import com.wms.common.CodeGenerator;
 import com.wms.inventory.entity.Inventory;
@@ -52,6 +54,7 @@ public class ShipOrderService {
     private final InventoryService inventoryService;
     private final SerialService serialService;
     private final CodeGenerator codeGenerator;
+    private final ApprovalService approvalService;
 
     // ------------------------------------------------------------------ CRUD
 
@@ -68,6 +71,10 @@ public class ShipOrderService {
         order.setPickedQty(BigDecimal.ZERO);
         order.setShippedQty(BigDecimal.ZERO);
         order.setTotalQty(sum(order.getLines()));
+        order.setApprovalStatus(approvalService.initialStatus(order.getWarehouseCode()));
+        order.setApprovedBy(null);
+        order.setApprovedAt(null);
+        order.setApprovalRemark(null);
         orderMapper.insert(order);
         saveLines(order);
         return load(order.getId());
@@ -91,10 +98,35 @@ public class ShipOrderService {
         db.setAddress(order.getAddress());
         db.setRemark(order.getRemark());
         db.setTotalQty(sum(order.getLines()));
+        db.setApprovalStatus(approvalService.initialStatus(db.getWarehouseCode()));
         orderMapper.updateById(db);
         lineMapper.delete(new LambdaQueryWrapper<ShipOrderLine>().eq(ShipOrderLine::getOrderId, id));
         db.setLines(order.getLines());
         saveLines(db);
+        return load(id);
+    }
+
+    @Transactional
+    public ShipOrder approve(Long id, String remark) {
+        ShipOrder db = require(id);
+        String by = approvalService.requirePending("出库单", db.getCode(), db.getApprovalStatus());
+        db.setApprovalStatus(ApprovalStatus.APPROVED);
+        db.setApprovedBy(by);
+        db.setApprovedAt(approvalService.now());
+        db.setApprovalRemark(remark);
+        orderMapper.updateById(db);
+        return load(id);
+    }
+
+    @Transactional
+    public ShipOrder reject(Long id, String remark) {
+        ShipOrder db = require(id);
+        String by = approvalService.requirePending("出库单", db.getCode(), db.getApprovalStatus());
+        db.setApprovalStatus(ApprovalStatus.REJECTED);
+        db.setApprovedBy(by);
+        db.setApprovedAt(approvalService.now());
+        db.setApprovalRemark(remark);
+        orderMapper.updateById(db);
         return load(id);
     }
 
@@ -140,6 +172,7 @@ public class ShipOrderService {
         if (!"NEW".equals(order.getStatus()) && !"PART_ALLOCATED".equals(order.getStatus())) {
             throw new BizException("出库单状态 " + order.getStatus() + " 不可分配");
         }
+        approvalService.requireReleased("出库单", order.getCode(), order.getApprovalStatus());
         Location staging = inventoryService.requireLocationByType(order.getWarehouseCode(), "STAGING_OUT");
         boolean full = true;
         for (ShipOrderLine line : load(orderId).getLines()) {

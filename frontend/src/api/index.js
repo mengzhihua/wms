@@ -27,6 +27,8 @@ export const inbound = {
   create: (data) => http.post('/inbound/asn', data),
   update: (id, data) => http.put(`/inbound/asn/${id}`, data),
   cancel: (id) => http.post(`/inbound/asn/${id}/cancel`),
+  approve: (id, remark) => http.post(`/inbound/asn/${id}/approve`, { remark }),
+  reject: (id, remark) => http.post(`/inbound/asn/${id}/reject`, { remark }),
   receive: (id, lines) => http.post(`/inbound/asn/${id}/receive`, lines),
   closeReceiving: (id) => http.post(`/inbound/asn/${id}/close-receiving`),
   tasks: (id) => http.get(`/inbound/asn/${id}/tasks`),
@@ -48,6 +50,8 @@ export const outbound = {
   pack: (id, data) => http.post(`/outbound/order/${id}/pack`, data),
   cartonSuggest: (id) => http.get(`/outbound/order/${id}/carton-suggest`),
   cancel: (id) => http.post(`/outbound/order/${id}/cancel`),
+  approve: (id, remark) => http.post(`/outbound/order/${id}/approve`, { remark }),
+  reject: (id, remark) => http.post(`/outbound/order/${id}/reject`, { remark }),
   tasks: (id) => http.get(`/outbound/order/${id}/tasks`),
   pickPage: (params) => http.get('/outbound/pick/page', { params }),
   wavePage: (params) => http.get('/outbound/wave/page', { params }),
@@ -162,5 +166,12 @@ export const authApi = {
 
 export const system = {
   user: crud('/system/user'),
+  role: {
+    list: () => http.get('/system/role/list'),
+    perms: () => http.get('/system/role/perms'),
+    create: (d) => http.post('/system/role', d),
+    update: (id, d) => http.put(`/system/role/${id}`, d),
+    remove: (id) => http.delete(`/system/role/${id}`)
+  },
   oplogPage: (params) => http.get('/system/oplog/page', { params })
 }

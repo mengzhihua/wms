@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wms.common.R;
 import com.wms.system.entity.User;
 import com.wms.system.mapper.UserMapper;
+import com.wms.system.service.RoleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -27,6 +28,7 @@ public class AuthInterceptor implements HandlerInterceptor {
 
     private final TokenService tokenService;
     private final UserMapper userMapper;
+    private final RoleService roleService;
     private final ObjectMapper objectMapper;
 
     @Value("${wms.open.api-key:}")
@@ -54,7 +56,7 @@ public class AuthInterceptor implements HandlerInterceptor {
         if (user == null || user.getStatus() == null || user.getStatus() != 1) {
             return reject(res, HttpStatus.UNAUTHORIZED, "账号不存在或已停用");
         }
-        if (!AccessPolicy.allows(user.getRole(), req.getMethod(), req.getRequestURI())) {
+        if (!AccessPolicy.allows(roleService.permsOf(user.getRole()), req.getMethod(), req.getRequestURI())) {
             return reject(res, HttpStatus.FORBIDDEN, "当前角色无权执行此操作");
         }
         CurrentUser.set(user);

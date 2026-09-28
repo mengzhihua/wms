@@ -3,6 +3,9 @@ package com.wms.system.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.wms.common.BizException;
 import com.wms.system.auth.PasswordHasher;
+import com.wms.system.auth.Permission;
+import com.wms.system.entity.Role;
+import com.wms.system.mapper.RoleMapper;
 import com.wms.system.auth.TokenService;
 import com.wms.system.entity.User;
 import com.wms.system.mapper.UserMapper;
@@ -16,16 +19,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.Arrays;
-import java.util.List;
+import java.util.Set;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserService implements ApplicationRunner {
-    private static final List<String> ROLES = Arrays.asList(User.ADMIN, User.OPERATOR, User.VIEWER);
-
     private final UserMapper userMapper;
+    private final RoleMapper roleMapper;
+    private final RoleService roleService;
     private final TokenService tokenService;
 
     @Value("${wms.auth.admin-password:admin123}")
@@ -34,6 +36,10 @@ public class UserService implements ApplicationRunner {
     /** 首次启动无任何用户时创建 admin 账号（口令来自 wms.auth.admin-password / WMS_ADMIN_PASSWORD） */
     @Override
     public void run(ApplicationArguments args) {
+        seedRole(User.ADMIN, "管理员", Permission.ALL);
+        seedRole(User.OPERATOR, "作业员", String.join(",", Permission.OPERATOR_DEFAULTS));
+        seedRole(User.VIEWER, "只读", "");
+        roleService.evict();
         if (userMapper.selectCount(null) > 0) {
             return;
         }
@@ -47,10 +53,26 @@ public class UserService implements ApplicationRunner {
         log.info("已初始化管理员账号 admin");
     }
 
+    /** 内置角色不存在时创建(旧库升级 / 首次启动); 已存在则保留管理员的自定义权限 */
+    private void seedRole(String code, String name, String perms) {
+        if (roleMapper.selectCount(new LambdaQueryWrapper<Role>().eq(Role::getCode, code)) > 0) {
+            return;
+        }
+        Role r = new Role();
+        r.setCode(code);
+        r.setName(name);
+        r.setPerms(perms);
+        r.setBuiltin(true);
+        r.setStatus(1);
+        roleMapper.insert(r);
+    }
+
     @Data
     public static class LoginResult {
         private String token;
         private User user;
+        /** 角色权限码, "*" 表示全部 */
+        private Set<String> perms;
     }
 
     @Transactional
@@ -67,6 +89,7 @@ public class UserService implements ApplicationRunner {
         LoginResult r = new LoginResult();
         r.setToken(tokenService.issue(user.getId(), user.getUsername()));
         r.setUser(user);
+        r.setPerms(roleService.permsOf(user.getRole()));
         return r;
     }
 
@@ -87,8 +110,8 @@ public class UserService implements ApplicationRunner {
         if (entity.getUsername() == null || entity.getUsername().trim().isEmpty()) {
             throw new BizException("用户名不能为空");
         }
-        if (!ROLES.contains(entity.getRole())) {
-            throw new BizException("角色必须为 " + ROLES);
+        if (!roleService.exists(entity.getRole())) {
+            throw new BizException("角色不存在: " + entity.getRole());
         }
         if (entity.getStatus() == null) {
             entity.setStatus(1);

@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS wms_warehouse (
   contact VARCHAR(64),
   phone VARCHAR(32),
   status INT DEFAULT 1,
+  approval_required BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP,
   updated_at TIMESTAMP,
   CONSTRAINT uk_warehouse_code UNIQUE (code)
@@ -197,6 +198,10 @@ CREATE TABLE IF NOT EXISTS wms_asn (
   customer_code VARCHAR(32),
   qc_qty DECIMAL(18,3),
   rejected_qty DECIMAL(18,3),
+  approval_status VARCHAR(16),
+  approved_by VARCHAR(64),
+  approved_at TIMESTAMP,
+  approval_remark VARCHAR(255),
   created_at TIMESTAMP,
   updated_at TIMESTAMP,
   CONSTRAINT uk_asn_code UNIQUE (code)
@@ -257,6 +262,10 @@ CREATE TABLE IF NOT EXISTS wms_ship_order (
   allocated_qty DECIMAL(18,3),
   picked_qty DECIMAL(18,3),
   shipped_qty DECIMAL(18,3),
+  approval_status VARCHAR(16),
+  approved_by VARCHAR(64),
+  approved_at TIMESTAMP,
+  approval_remark VARCHAR(255),
   tracking_no VARCHAR(64),
   carton_code VARCHAR(32),
   package_count INT,
@@ -376,6 +385,19 @@ CREATE TABLE IF NOT EXISTS wms_user (
   created_at TIMESTAMP,
   updated_at TIMESTAMP,
   CONSTRAINT uk_user_name UNIQUE (username)
+);
+
+CREATE TABLE IF NOT EXISTS wms_role (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  code VARCHAR(32) NOT NULL,
+  name VARCHAR(64) NOT NULL,
+  perms VARCHAR(1024),
+  builtin BOOLEAN DEFAULT FALSE,
+  status INT DEFAULT 1,
+  remark VARCHAR(255),
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP,
+  CONSTRAINT uk_role_code UNIQUE (code)
 );
 
 -- ===================== 单号序列 / 操作日志 =====================

@@ -41,10 +41,12 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { canWrite } from '../../auth'
+import { hasPerm, PERM } from '../../auth'
 import { outbound } from '../../api'
 import StatusTag from '../../components/StatusTag.vue'
 import { fmt } from '../../utils'
+
+const canWrite = () => hasPerm(PERM.OUTBOUND_WRITE)
 
 const rows = ref([])
 const total = ref(0)

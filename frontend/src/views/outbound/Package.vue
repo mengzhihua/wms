@@ -153,11 +153,13 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { canWrite } from '../../auth'
+import { hasPerm, PERM } from '../../auth'
 import { outbound } from '../../api'
 import StatusTag from '../../components/StatusTag.vue'
 import { useOptions } from '../../composables/useOptions'
 import { fmt } from '../../utils'
+
+const canWrite = () => hasPerm(PERM.OUTBOUND_WRITE)
 
 const TYPE = { ONE_ORDER_ONE_PACKAGE: '一单一包', SPLIT_BY_WEIGHT: '按重量拆箱', MANUAL: '手工分箱' }
 const PACK = { ONE_ORDER_ONE_PACKAGE: '一单一包', SPLIT_BY_WEIGHT: '按重量拆箱' }

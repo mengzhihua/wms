@@ -114,7 +114,9 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { report, basic } from '../../api'
 import { useOptions } from '../../composables/useOptions'
-import { isAdmin } from '../../auth'
+import { hasPerm, PERM } from '../../auth'
+
+const isAdmin = () => hasPerm(PERM.REPORT_WRITE)
 import StatusTag from '../../components/StatusTag.vue'
 
 const TXN = ['RECEIVE', 'PUTAWAY', 'PICK', 'SHIP', 'REPLENISH', 'QC_REJECT']

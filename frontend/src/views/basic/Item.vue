@@ -15,7 +15,7 @@ import { ElMessage } from 'element-plus'
 import CrudPage from '../../components/CrudPage.vue'
 import { basic, downloadCsv, importCsv } from '../../api'
 import { useOptions, statusCol } from '../../composables/useOptions'
-import { isAdmin } from '../../auth'
+import { canEditMaster as isAdmin } from '../../auth'
 
 const { options } = useOptions(['owner'])
 const pageRef = ref()

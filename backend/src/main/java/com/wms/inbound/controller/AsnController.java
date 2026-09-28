@@ -63,6 +63,23 @@ public class AsnController {
         return R.ok();
     }
 
+    @Data
+    public static class ApprovalReq {
+        private String remark;
+    }
+
+    /** 审核通过(需 inbound:approve) */
+    @PostMapping("/asn/{id}/approve")
+    public R<Asn> approve(@PathVariable Long id, @RequestBody(required = false) ApprovalReq req) {
+        return R.ok(asnService.approve(id, req == null ? null : req.getRemark()));
+    }
+
+    /** 驳回(需 inbound:approve) */
+    @PostMapping("/asn/{id}/reject")
+    public R<Asn> reject(@PathVariable Long id, @RequestBody(required = false) ApprovalReq req) {
+        return R.ok(asnService.reject(id, req == null ? null : req.getRemark()));
+    }
+
     @PostMapping("/asn/{id}/receive")
     public R<Asn> receive(@PathVariable Long id, @RequestBody List<AsnService.ReceiveLine> lines) {
         return R.ok(asnService.receive(id, lines));

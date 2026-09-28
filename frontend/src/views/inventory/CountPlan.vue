@@ -312,11 +312,13 @@
 <script setup>
 import { computed, defineComponent, h, onMounted, reactive, ref } from 'vue'
 import { ElButton, ElMessage, ElMessageBox, ElPopconfirm } from 'element-plus'
-import { canWrite } from '../../auth'
+import { hasPerm, PERM } from '../../auth'
 import { inventory } from '../../api'
 import StatusTag from '../../components/StatusTag.vue'
 import { useOptions } from '../../composables/useOptions'
 import { fmt } from '../../utils'
+
+const canWrite = () => hasPerm(PERM.INVENTORY_WRITE)
 
 const PLAN_STATUSES = ['DRAFT', 'PENDING', 'APPROVED', 'EXECUTING', 'COMPLETED', 'CANCELLED']
 const TASK_STATUSES = ['PENDING', 'CLAIMED', 'DONE', 'CANCELLED']

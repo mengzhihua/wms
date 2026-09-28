@@ -144,6 +144,8 @@ class RoleApprovalApiTest {
                     "{\"warehouseCode\":\"WH01\",\"ownerCode\":\"OWN01\",\"supplierCode\":\"SUP01\",\"type\":\"PURCHASE\","
                             + "\"lines\":[{\"itemCode\":\"SKU-APPR\",\"expectedQty\":5}]}");
             assertEquals("PENDING", resub.path("data").path("approvalStatus").asText());
+            assertTrue(resub.path("data").path("approvedBy").asText("").isEmpty());
+            assertTrue(resub.path("data").path("approvalRemark").asText("").isEmpty());
             lineId = resub.path("data").path("lines").get(0).path("id").asLong();
             JsonNode approved = call(admin, "POST", "/api/inbound/asn/" + asnId + "/approve", "{\"remark\":\"ok\"}");
             assertEquals("APPROVED", approved.path("data").path("approvalStatus").asText());

@@ -1,6 +1,7 @@
 package com.wms.inbound.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.wms.basic.entity.Item;
 import com.wms.basic.entity.Location;
 import com.wms.basic.mapper.ItemMapper;
@@ -98,7 +99,12 @@ public class AsnService {
         db.setCrossDockOrderCode(blankToNull(asn.getCrossDockOrderCode()));
         db.setTotalQty(asn.getLines().stream().map(AsnLine::getExpectedQty).reduce(BigDecimal.ZERO, BigDecimal::add));
         db.setApprovalStatus(approvalService.initialStatus(db.getWarehouseCode()));
+        db.setApprovedBy(null);
+        db.setApprovedAt(null);
+        db.setApprovalRemark(null);
         asnMapper.updateById(db);
+        asnMapper.update(null, new LambdaUpdateWrapper<Asn>().eq(Asn::getId, id)
+                .set(Asn::getApprovedBy, null).set(Asn::getApprovedAt, null).set(Asn::getApprovalRemark, null));
         lineMapper.delete(new LambdaQueryWrapper<AsnLine>().eq(AsnLine::getAsnId, id));
         db.setLines(asn.getLines());
         saveLines(db);

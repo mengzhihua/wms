@@ -53,6 +53,9 @@ class AccessPolicyTest {
         assertFalse(AccessPolicy.allows(approver, "POST", "/api/inbound/asn"));
         assertFalse(AccessPolicy.allows(approver, "POST", "/api/inventory/move"));
         assertEquals(Permission.INBOUND_APPROVE, AccessPolicy.requiredPermission("POST", "/api/inbound/asn/1/approve"));
+        assertEquals(Permission.INBOUND_WRITE, AccessPolicy.requiredPermission("POST", "/api/inbound/qc/1/approve"));
+        assertEquals(Permission.OUTBOUND_WRITE, AccessPolicy.requiredPermission("POST", "/api/outbound/wave/1/reject"));
+        assertFalse(AccessPolicy.allows(approver, "POST", "/api/inbound/qc/1/approve"));
         assertEquals(Permission.ALL, AccessPolicy.requiredPermission("POST", "/api/unknown/x"));
     }
 }

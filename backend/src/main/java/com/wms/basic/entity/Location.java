@@ -22,5 +22,8 @@ public class Location extends BaseEntity {
     private Integer pickSeq;
     private Boolean mixSku;
     private Boolean mixLot;
+    /** BIN 隔板 / FLOOR 地堆 / BULK 横梁 / DOCK 月台 */
+    private String handling;
+    private Integer palletSlots;
     private String status;
 }

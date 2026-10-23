@@ -1,8 +1,11 @@
 package com.wms.outbound.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.wms.basic.entity.CarrierCutoff;
 import com.wms.basic.entity.Location;
+import com.wms.basic.mapper.CarrierCutoffMapper;
 import com.wms.basic.mapper.LocationMapper;
+import com.wms.basic.service.WarehouseProfileService;
 import com.wms.common.BizException;
 import com.wms.outbound.entity.PickTask;
 import com.wms.outbound.entity.ShipOrder;
@@ -43,6 +46,8 @@ public class WaveStrategyService {
     private final PickTaskMapper pickMapper;
     private final LocationMapper locationMapper;
     private final WaveService waveService;
+    private final WarehouseProfileService profiles;
+    private final CarrierCutoffMapper carrierCutoffMapper;
 
     /** 候选出库单画像: 品项/件数按订单明细统计, 储区按待拣任务来源库位统计 */
     @Data
@@ -113,8 +118,17 @@ public class WaveStrategyService {
      */
     @Transactional
     public List<RunResult> run(String warehouse, Long strategyId, boolean dryRun) {
+        return run(warehouse, strategyId, dryRun, LocalTime.now().getHour());
+    }
+
+    /** hour 供截单测试注入。大件仓不自动成波，手工建波次仍走 WaveService。 */
+    @Transactional
+    public List<RunResult> run(String warehouse, Long strategyId, boolean dryRun, int hour) {
         if (warehouse == null || warehouse.isEmpty()) {
             throw new BizException("仓库不能为空");
+        }
+        if (profiles.isBulky(warehouse)) {
+            throw new BizException("大件仓默认按单拣货，不自动成波");
         }
         List<WaveStrategy> strategies = strategyId == null
                 ? enabledByPriority() : new ArrayList<>(Collections.singletonList(require(strategyId)));
@@ -122,17 +136,18 @@ public class WaveStrategyService {
             throw new BizException("没有启用的波次策略");
         }
         List<OrderProfile> pool = candidates(warehouse);
+        Map<String, Integer> cutoffs = carrierCutoffMapper.selectList(new LambdaQueryWrapper<CarrierCutoff>()
+                        .eq(CarrierCutoff::getWarehouseCode, warehouse))
+                .stream().collect(Collectors.toMap(CarrierCutoff::getCarrier, CarrierCutoff::getCutoffHour, (a, b) -> a));
         List<RunResult> results = new ArrayList<>();
-        int hour = LocalTime.now().getHour();
         for (WaveStrategy s : strategies) {
             RunResult r = new RunResult();
             r.setStrategyCode(s.getCode());
             r.setStrategyName(s.getName());
             results.add(r);
-            if (strategyId == null && s.getCutoffHour() != null && hour < s.getCutoffHour()) {
-                continue;
-            }
-            List<OrderProfile> matched = pool.stream().filter(p -> accepts(s, p)).collect(Collectors.toList());
+            List<OrderProfile> matched = pool.stream().filter(p -> accepts(s, p))
+                    .filter(p -> cutoffOpen(strategyId, s, p, cutoffs, hour))
+                    .collect(Collectors.toList());
             Map<String, List<OrderProfile>> groups = matched.stream()
                     .collect(Collectors.groupingBy(p -> groupKey(s, p), LinkedHashMap::new, Collectors.toList()));
             Set<Long> used = new HashSet<>();
@@ -194,6 +209,19 @@ public class WaveStrategyService {
         return byOrder.values().stream()
                 .filter(p -> !inWave.contains(p.getOrder().getId()) && p.isHasOpenTask())
                 .collect(Collectors.toList());
+    }
+
+    /** 未指定策略时，尾单按承运商截单时刻过滤。没有承运商配置时用策略上的小时。 */
+    static boolean cutoffOpen(Long strategyId, WaveStrategy s, OrderProfile p, Map<String, Integer> cutoffs, int hour) {
+        if (strategyId != null || s.getCutoffHour() == null) {
+            return true;
+        }
+        String carrier = p.getOrder().getCarrier();
+        Integer limit = carrier == null ? null : cutoffs.get(carrier);
+        if (limit == null) {
+            limit = s.getCutoffHour();
+        }
+        return hour >= limit;
     }
 
     static boolean accepts(WaveStrategy s, OrderProfile p) {

@@ -81,15 +81,16 @@
     </el-dialog>
 
     <!-- 收货 -->
-    <el-dialog v-model="receiveVisible" :title="`收货 - ${current.code}`" width="900px" destroy-on-close>
+    <el-dialog v-model="receiveVisible" :title="`收货 - ${current.code}`" width="1040px" destroy-on-close>
       <el-alert type="info" :closable="false" style="margin-bottom: 8px">收货后库存进入收货暂存区并自动生成上架任务；批次管理物料必须填写批次号；序列号管理物料需逐一登记 SN；需质检物料和退货入库将进入质检位冻结，放行后才能上架。</el-alert>
       <el-table :data="receiveLines" size="small" border>
         <el-table-column prop="itemCode" label="物料" width="110" />
         <el-table-column prop="expectedQty" label="预期" width="70" />
         <el-table-column prop="receivedQty" label="已收" width="70" />
         <el-table-column label="本次收货" width="140"><template #default="{ row }"><el-input-number v-model="row.qty" :min="0" style="width: 100%" /></template></el-table-column>
-        <el-table-column label="批次号" width="150"><template #default="{ row }"><el-input v-model="row.lotNo" /></template></el-table-column>
-        <el-table-column label="效期" width="160"><template #default="{ row }"><el-date-picker v-model="row.expiryDate" type="date" value-format="YYYY-MM-DD" style="width: 100%" /></template></el-table-column>
+        <el-table-column label="批次号" width="130"><template #default="{ row }"><el-input v-model="row.lotNo" /></template></el-table-column>
+        <el-table-column label="容器" width="130"><template #default="{ row }"><el-input v-model="row.lpnCode" placeholder="托盘/箱" /></template></el-table-column>
+        <el-table-column label="效期" width="150"><template #default="{ row }"><el-date-picker v-model="row.expiryDate" type="date" value-format="YYYY-MM-DD" style="width: 100%" /></template></el-table-column>
         <el-table-column label="收货库位" min-width="140">
           <template #default="{ row }">
             <el-select v-model="row.locationCode" clearable placeholder="默认收货暂存区" style="width: 100%">
@@ -214,7 +215,7 @@ async function openReceive(row) {
   current.value = await inbound.get(row.id)
   receiveLines.value = current.value.lines.map((l) => ({
     lineId: l.id, itemCode: l.itemCode, expectedQty: l.expectedQty, receivedQty: l.receivedQty,
-    qty: Math.max(0, l.expectedQty - l.receivedQty), lotNo: l.lotNo, expiryDate: l.expiryDate, locationCode: ''
+    qty: Math.max(0, l.expectedQty - l.receivedQty), lotNo: l.lotNo, expiryDate: l.expiryDate, locationCode: '', lpnCode: ''
   }))
   receiveVisible.value = true
 }

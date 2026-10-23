@@ -18,6 +18,12 @@ export const basic = {
   supplier: crud('/basic/supplier'),
   customer: crud('/basic/customer'),
   carton: crud('/basic/carton'),
+  pickSlot: crud('/basic/pick-slot'),
+  carrierCutoff: crud('/basic/carrier-cutoff'),
+  lpn: crud('/basic/lpn'),
+  dock: crud('/basic/dock'),
+  vmiAgreement: crud('/basic/vmi-agreement'),
+  vmiSuggest: (warehouseCode) => http.post('/inbound/vmi/suggest', null, { params: { warehouseCode } }),
   itemAbcApply: (data) => http.post('/basic/item/abc-apply', data)
 }
 
@@ -126,7 +132,12 @@ export const inventory = {
   replenishConfirm: (id, toLocation) => http.post(`/inventory/replenish/${id}/confirm`, { toLocation }),
   replenishCancel: (id) => http.post(`/inventory/replenish/${id}/cancel`),
   serialPage: (params) => http.get('/inventory/serial/page', { params }),
-  serialTrace: (serialNo, params) => http.get(`/inventory/serial/${encodeURIComponent(serialNo)}`, { params })
+  serialTrace: (serialNo, params) => http.get(`/inventory/serial/${encodeURIComponent(serialNo)}`, { params }),
+  damage: (data) => http.post('/inventory/damage', data),
+  consumptionPage: (params) => http.get('/inventory/consumption/page', { params }),
+  consumptionGet: (id) => http.get(`/inventory/consumption/${id}`),
+  consumptionCreate: (data) => http.post('/inventory/consumption', data),
+  consumptionPost: (id) => http.post(`/inventory/consumption/${id}/post`)
 }
 
 export const report = {

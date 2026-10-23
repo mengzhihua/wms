@@ -210,6 +210,7 @@ class SerialCartonAbcFlowTest {
 
     @Test
     void abcAnalysisRanksByShipQtyAndLaborGroupsByOperator() {
+        txnMapper.delete(new LambdaQueryWrapper<InventoryTxn>().eq(InventoryTxn::getTxnType, "SHIP"));
         putawayAll(receive(newAsn("SKU002", 100), 100, "LOTABC01", null).getId());
         putawayAll(receive(newAsn("SKU003", 100), 100, null).getId());
         orderService.ship(pickedOrder("SKU002", 90).getId());

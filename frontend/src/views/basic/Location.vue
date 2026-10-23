@@ -23,6 +23,10 @@ const columns = [
   { prop: 'pickSeq', label: '拣货顺序', type: 'number', width: 90, default: 0 },
   { prop: 'maxWeight', label: '最大承重(kg)', type: 'number', precision: 3, hideInTable: true },
   { prop: 'maxVolume', label: '最大容积(m³)', type: 'number', precision: 3, hideInTable: true },
+  { prop: 'handling', label: '作业形态', type: 'select', width: 100, default: 'BIN', options: [
+    { label: '隔板', value: 'BIN' }, { label: '地堆', value: 'FLOOR' }, { label: '横梁', value: 'BULK' }, { label: '月台', value: 'DOCK' }
+  ] },
+  { prop: 'palletSlots', label: '托盘位', type: 'number', width: 80 },
   { prop: 'mixSku', label: '允许混SKU', type: 'bool', width: 100, default: true },
   { prop: 'mixLot', label: '允许混批次', type: 'bool', width: 100, default: true },
   { prop: 'status', label: '状态', type: 'select', width: 90, default: 'AVAILABLE', filter: true, options: [

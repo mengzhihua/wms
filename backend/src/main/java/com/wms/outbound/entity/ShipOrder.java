@@ -42,6 +42,11 @@ public class ShipOrder extends BaseEntity {
     private BigDecimal grossWeight;
     private LocalDateTime packedAt;
     private LocalDateTime shippedAt;
+    /** SISQ / SIFQ / SIW / MULTI，创建时按明细计算 */
+    private String orderShape;
+    /** 送装窗口，大件仓使用 */
+    private String deliveryWindow;
+    private Boolean installRequired;
 
     @TableField(exist = false)
     private List<ShipOrderLine> lines;

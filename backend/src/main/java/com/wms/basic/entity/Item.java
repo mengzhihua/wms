@@ -28,5 +28,7 @@ public class Item extends BaseEntity {
     private Boolean qcRequired;
     /** 序列号管理：收货/发运必须逐一登记 SN */
     private Boolean snControl;
+    /** EACH / CASE / PALLET。大件整托时 PALLET，箱规用 packQty */
+    private String handlingClass;
     private Integer status;
 }

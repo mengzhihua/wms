@@ -14,7 +14,12 @@ export const menus = [
       { path: 'item', name: '物料', component: () => import('../views/basic/Item.vue') },
       { path: 'supplier', name: '供应商', component: () => import('../views/basic/Supplier.vue') },
       { path: 'customer', name: '客户', component: () => import('../views/basic/Customer.vue') },
-      { path: 'carton', name: '包材/箱型', component: () => import('../views/basic/Carton.vue') }
+      { path: 'carton', name: '包材/箱型', component: () => import('../views/basic/Carton.vue') },
+      { path: 'pick-slot', name: '固定拣货位', component: () => import('../views/basic/PickSlot.vue') },
+      { path: 'carrier-cutoff', name: '承运商截单', component: () => import('../views/basic/CarrierCutoff.vue') },
+      { path: 'lpn', name: '容器', component: () => import('../views/basic/Lpn.vue') },
+      { path: 'dock', name: '月台', component: () => import('../views/basic/Dock.vue') },
+      { path: 'vmi-agreement', name: 'VMI协议', component: () => import('../views/basic/VmiAgreement.vue') }
     ]
   },
   {
@@ -22,7 +27,8 @@ export const menus = [
     children: [
       { path: 'asn', name: '入库单(ASN)', component: () => import('../views/inbound/Asn.vue') },
       { path: 'qc', name: '质检放行', component: () => import('../views/inbound/Qc.vue') },
-      { path: 'putaway', name: '上架任务', component: () => import('../views/inbound/Putaway.vue') }
+      { path: 'putaway', name: '上架任务', component: () => import('../views/inbound/Putaway.vue') },
+      { path: 'appointment', name: '月台预约', component: () => import('../views/inbound/Appointment.vue') }
     ]
   },
   {
@@ -45,7 +51,8 @@ export const menus = [
       { path: 'serial', name: '序列号(SN)', component: () => import('../views/inventory/Serial.vue') },
       { path: 'count-plan', name: '盘点计划', component: () => import('../views/inventory/CountPlan.vue') },
       { path: 'count', name: '盘点单(快捷)', component: () => import('../views/inventory/Count.vue') },
-      { path: 'txn', name: '库存流水', component: () => import('../views/inventory/Txn.vue') }
+      { path: 'txn', name: '库存流水', component: () => import('../views/inventory/Txn.vue') },
+      { path: 'consumption', name: '消耗单', component: () => import('../views/inventory/Consumption.vue') }
     ]
   },
   { path: '/report', name: '报表分析', icon: 'DataAnalysis', component: () => import('../views/report/Report.vue') },

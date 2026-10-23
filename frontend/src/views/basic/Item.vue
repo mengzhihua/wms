@@ -27,6 +27,9 @@ const columns = [
   { prop: 'spec', label: '规格' },
   { prop: 'unit', label: '单位', width: 70, default: 'EA' },
   { prop: 'packQty', label: '箱规', type: 'number', width: 70 },
+  { prop: 'handlingClass', label: '作业分类', type: 'select', width: 100, default: 'EACH', options: [
+    { label: '件', value: 'EACH' }, { label: '箱', value: 'CASE' }, { label: '托', value: 'PALLET' }
+  ] },
   { prop: 'barcode', label: '条码', width: 130 },
   { prop: 'category', label: '分类', width: 100 },
   { prop: 'lotControl', label: '批次管理', type: 'bool', width: 90, default: false },

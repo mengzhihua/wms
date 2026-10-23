@@ -248,6 +248,7 @@ CREATE TABLE IF NOT EXISTS wms_putaway_task (
   to_location VARCHAR(32),
   qty DECIMAL(18,3),
   status VARCHAR(16),
+  equipment VARCHAR(32),
   created_at TIMESTAMP,
   updated_at TIMESTAMP
 );
@@ -504,6 +505,7 @@ CREATE TABLE IF NOT EXISTS wms_replenish_task (
   qty DECIMAL(18,3),
   status VARCHAR(16),
   remark VARCHAR(255),
+  equipment VARCHAR(32),
   created_at TIMESTAMP,
   updated_at TIMESTAMP
 );
@@ -640,6 +642,7 @@ CREATE TABLE IF NOT EXISTS wms_wave_strategy (
   cutoff_hour INT,
   pack_strategy VARCHAR(32) DEFAULT 'ONE_ORDER_ONE_PACKAGE',
   max_package_weight DECIMAL(18,3),
+  skip_single_weigh BOOLEAN DEFAULT FALSE,
   enabled BOOLEAN DEFAULT TRUE,
   remark VARCHAR(255),
   created_at TIMESTAMP,
@@ -772,6 +775,7 @@ CREATE TABLE IF NOT EXISTS wms_appointment (
   window_end TIMESTAMP,
   status VARCHAR(16) NOT NULL,
   remark VARCHAR(255),
+  equipment VARCHAR(32),
   created_at TIMESTAMP,
   updated_at TIMESTAMP,
   CONSTRAINT uk_appointment_code UNIQUE (code)

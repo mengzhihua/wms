@@ -28,4 +28,6 @@ public class PutawayTask extends BaseEntity {
     private String toLocation;
     private BigDecimal qty;
     private String status;
+    /** 叉车等设备。大件整托上架为 FORKLIFT */
+    private String equipment;
 }

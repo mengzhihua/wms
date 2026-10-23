@@ -21,4 +21,6 @@ public class Appointment extends BaseEntity {
     private LocalDateTime windowEnd;
     private String status;
     private String remark;
+    /** 靠台作业设备，例如 FORKLIFT */
+    private String equipment;
 }

@@ -21,6 +21,7 @@ const columns = [
     { label: '已预约', value: 'BOOKED' }, { label: '已靠台', value: 'ARRIVED' },
     { label: '作业中', value: 'WORKING' }, { label: '已离开', value: 'LEFT' }
   ] },
+  { prop: 'equipment', label: '设备', width: 110, placeholder: 'FORKLIFT' },
   { prop: 'remark', label: '备注', hideInTable: true }
 ]
 </script>

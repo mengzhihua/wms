@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wms.common.BizException;
 import com.wms.inbound.entity.Asn;
 import com.wms.inbound.entity.AsnLine;
+import com.wms.outbound.entity.ShipOrder;
+import com.wms.outbound.entity.ShipOrderLine;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -31,7 +33,18 @@ public class SrmReceiptClient {
     private String apiKey;
 
     public void push(Asn asn) {
-        Map<String, Object> body = payload(asn);
+        post("/api/integration/wms/receipt", payload(asn), "收货");
+    }
+
+    public void pushSuggest(Asn asn) {
+        post("/api/integration/wms/vmi-suggest", suggestPayload(asn), "VMI 建议");
+    }
+
+    public void pushRtv(ShipOrder order) {
+        post("/api/integration/wms/rtv", rtvPayload(order), "退供");
+    }
+
+    private void post(String path, Map<String, Object> body, String name) {
         if (body == null || !"http".equalsIgnoreCase(mode)) {
             return;
         }
@@ -39,16 +52,16 @@ public class SrmReceiptClient {
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("X-Api-Key", apiKey);
         try {
-            String response = rest.postForObject(baseUrl + "/api/integration/wms/receipt",
+            String response = rest.postForObject(baseUrl + path,
                     new HttpEntity<Object>(body, headers), String.class);
             JsonNode root = objectMapper.readTree(response == null ? "{}" : response);
             if (root.path("code").asInt(-1) != 0) {
-                throw new BizException("SRM 拒绝收货回传: " + response);
+                throw new BizException("SRM 拒绝" + name + "回传: " + response);
             }
         } catch (BizException e) {
             throw e;
         } catch (Exception e) {
-            throw new BizException("推送 SRM 收货失败: " + e.getMessage());
+            throw new BizException("推送 SRM " + name + "失败: " + e.getMessage());
         }
     }
 
@@ -75,6 +88,53 @@ public class SrmReceiptClient {
                 item.put("lotNo", line.getLotNo());
                 item.put("receivedQty", line.getReceivedQty());
                 item.put("rejectedQty", line.getRejectedQty());
+                lines.add(item);
+            }
+        }
+        body.put("lines", lines);
+        return body;
+    }
+
+    /** VMI 建议入库。不要求外部单号，WMS 不自动收货。 */
+    public static Map<String, Object> suggestPayload(Asn asn) {
+        if (asn == null || !"VMI_SUGGEST".equals(asn.getType())) {
+            return null;
+        }
+        Map<String, Object> body = new LinkedHashMap<String, Object>();
+        body.put("wmsAsnCode", asn.getCode());
+        body.put("supplierCode", asn.getSupplierCode());
+        body.put("ownerCode", asn.getOwnerCode());
+        body.put("warehouseCode", asn.getWarehouseCode());
+        body.put("remark", asn.getRemark());
+        List<Map<String, Object>> lines = new ArrayList<Map<String, Object>>();
+        if (asn.getLines() != null) {
+            for (AsnLine line : asn.getLines()) {
+                Map<String, Object> item = new LinkedHashMap<String, Object>();
+                item.put("itemCode", line.getItemCode());
+                item.put("expectedQty", line.getExpectedQty());
+                lines.add(item);
+            }
+        }
+        body.put("lines", lines);
+        return body;
+    }
+
+    /** 退供发运完成后回传。只接受已发运的 RTV。 */
+    public static Map<String, Object> rtvPayload(ShipOrder order) {
+        if (order == null || !"RTV".equals(order.getType()) || !"SHIPPED".equals(order.getStatus())) {
+            return null;
+        }
+        Map<String, Object> body = new LinkedHashMap<String, Object>();
+        body.put("wmsOrderCode", order.getCode());
+        body.put("externalNo", order.getExternalNo());
+        body.put("ownerCode", order.getOwnerCode());
+        body.put("warehouseCode", order.getWarehouseCode());
+        List<Map<String, Object>> lines = new ArrayList<Map<String, Object>>();
+        if (order.getLines() != null) {
+            for (ShipOrderLine line : order.getLines()) {
+                Map<String, Object> item = new LinkedHashMap<String, Object>();
+                item.put("itemCode", line.getItemCode());
+                item.put("shippedQty", line.getShippedQty() == null ? line.getPickedQty() : line.getShippedQty());
                 lines.add(item);
             }
         }

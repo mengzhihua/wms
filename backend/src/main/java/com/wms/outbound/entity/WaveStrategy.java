@@ -38,6 +38,8 @@ public class WaveStrategy extends BaseEntity {
     private Integer cutoffHour;
     /** ONE_ORDER_ONE_PACKAGE / SPLIT_BY_WEIGHT */
     private String packStrategy;
+    /** 快消单品单件复核时，毛重留空则按物料重量计入。默认仍要求现场称重 */
+    private Boolean skipSingleWeigh;
     private BigDecimal maxPackageWeight;
     private Boolean enabled;
     private String remark;

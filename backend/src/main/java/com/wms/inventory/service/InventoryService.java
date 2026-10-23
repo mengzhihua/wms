@@ -455,8 +455,10 @@ public class InventoryService {
             }
             candidates.add(l);
         }
+        boolean pallet = profiles.isBulky(warehouse) && master != null && "PALLET".equals(master.getHandlingClass());
         candidates.sort(Comparator
                 .comparing((Location l) -> occupied.stream().anyMatch(i -> l.getCode().equals(i.getLocationCode())) ? 1 : 0)
+                .thenComparing(l -> pallet && l.getPalletSlots() != null && l.getPalletSlots() > 0 ? 0 : 1)
                 .thenComparing(l -> abcRank(l, master))
                 .thenComparing(l -> l.getPickSeq() == null ? Integer.MAX_VALUE : l.getPickSeq())
                 .thenComparing(Location::getCode));

@@ -326,6 +326,9 @@ public class ReplenishService {
         t.setQty(qty);
         t.setStatus("NEW");
         t.setRemark(remark);
+        if (profiles.isBulky(src.getWarehouseCode())) {
+            t.setEquipment("FORKLIFT");
+        }
         taskMapper.insert(t);
         return t;
     }

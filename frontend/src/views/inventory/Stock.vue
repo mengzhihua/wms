@@ -7,8 +7,11 @@
         <el-input v-model="query.locationCode" placeholder="库位" clearable @keyup.enter="load" @clear="load" style="width: 140px" />
         <el-input v-model="query.itemCode" placeholder="物料" clearable @keyup.enter="load" @clear="load" style="width: 140px" />
         <el-input v-model="query.lotNo" placeholder="批次" clearable @keyup.enter="load" @clear="load" style="width: 140px" />
+        <el-select v-model="query.ownership" placeholder="物权" clearable @change="load" style="width: 120px">
+          <el-option value="CUSTOMER" label="货主" /><el-option value="VENDOR" label="寄售" />
+        </el-select>
         <el-select v-model="query.status" placeholder="状态" clearable @change="load" style="width: 120px">
-          <el-option value="AVAILABLE" label="可用" /><el-option value="FROZEN" label="冻结" />
+          <el-option value="AVAILABLE" label="可用" /><el-option value="FROZEN" label="冻结" /><el-option value="DAMAGE" label="破损" />
         </el-select>
         <el-button type="primary" @click="load"><el-icon><Search /></el-icon>查询</el-button>
         <el-button @click="downloadCsv('/inventory/export', query, 'inventory.csv')">导出 CSV</el-button>
@@ -19,6 +22,8 @@
         <el-table-column prop="ownerCode" label="货主" width="90" />
         <el-table-column prop="itemCode" label="物料" width="100" />
         <el-table-column prop="lotNo" label="批次" width="120" />
+        <el-table-column prop="lpnCode" label="容器" width="120" />
+        <el-table-column prop="ownership" label="物权" width="90" />
         <el-table-column prop="qty" label="库存量" width="90" />
         <el-table-column prop="allocatedQty" label="已分配" width="90" />
         <el-table-column label="可用量" width="90"><template #default="{ row }">{{ row.status === 'AVAILABLE' && !row.countLock ? row.qty - row.allocatedQty : 0 }}</template></el-table-column>
@@ -31,6 +36,7 @@
             <el-button link type="primary" size="small" :disabled="row.status !== 'AVAILABLE' || row.countLock" @click="openMove(row)">移库</el-button>
             <el-button link type="warning" size="small" :disabled="row.countLock" @click="openAdjust(row)">调整</el-button>
             <el-button link :type="row.status === 'FROZEN' ? 'success' : 'danger'" size="small" @click="openFreeze(row)">{{ row.status === 'FROZEN' ? '解冻' : '冻结' }}</el-button>
+            <el-button v-if="row.status === 'AVAILABLE'" link type="danger" size="small" @click="markDamage(row)">破损</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -81,7 +87,7 @@ const rows = ref([])
 const total = ref(0)
 const loading = ref(false)
 const saving = ref(false)
-const query = reactive({ current: 1, size: 20, warehouseCode: '', ownerCode: '', locationCode: '', itemCode: '', lotNo: '', status: '' })
+const query = reactive({ current: 1, size: 20, warehouseCode: '', ownerCode: '', locationCode: '', itemCode: '', lotNo: '', status: '', ownership: '' })
 const dlg = reactive({ visible: false, mode: '', title: '' })
 const cur = ref({})
 const req = ref({})
@@ -113,6 +119,12 @@ function openFreeze(row) {
   cur.value = row
   req.value = { inventoryId: row.id, frozen: row.status !== 'FROZEN', reason: '' }
   Object.assign(dlg, { visible: true, mode: 'freeze', title: row.status === 'FROZEN' ? '库存解冻' : '库存冻结' })
+}
+
+async function markDamage(row) {
+  await inventory.damage({ inventoryId: row.id, reason: '现场破损' })
+  ElMessage.success('已转破损，不可分配')
+  load()
 }
 
 async function submit() {

@@ -39,6 +39,7 @@
         <el-table-column prop="zoneCode" label="储区" width="70" />
         <el-table-column label="截止" width="70"><template #default="{ row }">{{ row.cutoffHour != null ? row.cutoffHour + ':00' : '-' }}</template></el-table-column>
         <el-table-column label="打包" width="110"><template #default="{ row }">{{ PACK[row.packStrategy] || row.packStrategy }}<span v-if="row.maxPackageWeight"> ≤{{ row.maxPackageWeight }}kg</span></template></el-table-column>
+        <el-table-column label="单件免称重" width="100"><template #default="{ row }"><el-tag v-if="row.skipSingleWeigh" size="small" type="success">开启</el-tag><span v-else class="muted">称重</span></template></el-table-column>
         <el-table-column prop="remark" label="说明" min-width="160" show-overflow-tooltip />
         <el-table-column label="操作" width="190" fixed="right">
           <template #default="{ row }">
@@ -91,6 +92,7 @@
           </el-col>
           <el-col :span="12"><el-form-item label="单箱最大重量 kg"><el-input-number v-model="form.maxPackageWeight" :min="0" :precision="2" /></el-form-item></el-col>
         </el-row>
+        <el-form-item label="单件免称重"><el-switch v-model="form.skipSingleWeigh" /><span class="muted" style="margin-left: 8px">仅快消仓的单品单件。关闭时仍现场称重</span></el-form-item>
         <el-form-item label="说明"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item>
         <el-form-item label="启用"><el-switch v-model="form.enabled" /></el-form-item>
       </el-form>
@@ -159,7 +161,7 @@ async function load() {
 }
 
 function openForm(row) {
-  form.value = row ? { ...row } : { priority: 100, minOrders: 1, maxOrders: 50, packStrategy: 'ONE_ORDER_ONE_PACKAGE', enabled: true, groupByItem: false, groupByOwner: false, groupByCarrier: false }
+  form.value = row ? { ...row } : { priority: 100, minOrders: 1, maxOrders: 50, packStrategy: 'ONE_ORDER_ONE_PACKAGE', enabled: true, groupByItem: false, groupByOwner: false, groupByCarrier: false, skipSingleWeigh: false }
   formVisible.value = true
 }
 

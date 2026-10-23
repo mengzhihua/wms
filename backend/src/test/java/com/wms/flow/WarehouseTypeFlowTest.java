@@ -41,6 +41,7 @@ import com.wms.outbound.entity.PickTask;
 import com.wms.outbound.entity.ShipOrder;
 import com.wms.outbound.entity.ShipOrderLine;
 import com.wms.outbound.entity.WaveStrategy;
+import com.wms.outbound.mapper.WaveStrategyMapper;
 import com.wms.outbound.service.ShipOrderService;
 import com.wms.outbound.service.WaveStrategyService;
 import org.junit.jupiter.api.Test;
@@ -74,6 +75,7 @@ class WarehouseTypeFlowTest {
     @Autowired private PickSlotMapper pickSlotMapper;
     @Autowired private CarrierCutoffMapper carrierCutoffMapper;
     @Autowired private WaveStrategyService waveStrategyService;
+    @Autowired private WaveStrategyMapper waveStrategyMapper;
     @Autowired private LpnMapper lpnMapper;
     @Autowired private DockMapper dockMapper;
     @Autowired private AppointmentMapper appointmentMapper;
@@ -175,10 +177,14 @@ class WarehouseTypeFlowTest {
         warehouse(wh, "BULKY");
         loc(wh, "STAGING_IN", "RCV-01", null, null, 0);
         loc(wh, "STAGING_OUT", "SHP-01", null, null, 0);
+        loc(wh, "STORAGE", "STO-PLAIN", null, null, 1);
         loc(wh, "STORAGE", "FLOOR-1", null, 1, 5);
         loc(wh, "PICKING", "P-1", null, null, 1);
         item("IT-PALLET", new BigDecimal("10"), new BigDecimal("10"), "C", "PALLET", null);
         Asn asn = receive(wh, "IT-PALLET", 10, "L1", "PLT-100");
+        PutawayTask created = asnService.tasks(asn.getId()).get(0);
+        assertEquals("FLOOR-1", created.getSuggestLocation());
+        assertEquals("FORKLIFT", created.getEquipment());
         Inventory staged = inventoryMapper.selectOne(new LambdaQueryWrapper<Inventory>()
                 .eq(Inventory::getWarehouseCode, wh).eq(Inventory::getItemCode, "IT-PALLET")
                 .eq(Inventory::getLocationCode, "RCV-01"));
@@ -215,6 +221,41 @@ class WarehouseTypeFlowTest {
         appointmentMapper.updateById(appointment);
         assertEquals("ARRIVED", appointmentMapper.selectById(appointment.getId()).getStatus());
         assertEquals(asn.getCode(), appointment.getRefCode());
+    }
+
+    @Test
+    void fmcgSinglePieceSkipsManualWeighWhenStrategySaysSo() {
+        String wh = "WH-SKIP";
+        warehouse(wh, "FMCG");
+        loc(wh, "STAGING_IN", "RCV-01", null, null, 0);
+        loc(wh, "STAGING_OUT", "SHP-01", null, null, 0);
+        loc(wh, "STORAGE", "STO-01", null, null, 1);
+        item("IT-LIGHT", new BigDecimal("0.400"), null, "A", "EACH", null);
+        WaveStrategy strategy = new WaveStrategy();
+        strategy.setCode("SKIP-WEIGH");
+        strategy.setName("单件免称重");
+        strategy.setPriority(5);
+        strategy.setMinOrders(1);
+        strategy.setMaxOrders(10);
+        strategy.setEnabled(true);
+        strategy.setSkipSingleWeigh(true);
+        strategy.setPackStrategy("ONE_ORDER_ONE_PACKAGE");
+        waveStrategyService.save(strategy);
+        try {
+            Asn asn = receive(wh, "IT-LIGHT", 1, "L1", null);
+            asnService.putaway(asnService.tasks(asn.getId()).get(0).getId(), "STO-01");
+            ShipOrder allocated = orderService.allocate(order(wh, "IT-LIGHT", 1, "SALES").getId());
+            orderService.pick(orderService.tasks(allocated.getId()).get(0).getId(), BigDecimal.ONE);
+            ShipOrder packed = orderService.pack(allocated.getId(), 1, null, "SF", null);
+            assertEquals(0, new BigDecimal("0.400").compareTo(packed.getGrossWeight()));
+        } finally {
+            WaveStrategy saved = waveStrategyMapper.selectOne(new LambdaQueryWrapper<WaveStrategy>().eq(WaveStrategy::getCode, "SKIP-WEIGH"));
+            if (saved != null) {
+                saved.setEnabled(false);
+                saved.setSkipSingleWeigh(false);
+                waveStrategyMapper.updateById(saved);
+            }
+        }
     }
 
     @Test

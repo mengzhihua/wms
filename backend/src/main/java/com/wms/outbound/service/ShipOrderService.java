@@ -9,6 +9,9 @@ import com.wms.basic.entity.Location;
 import com.wms.basic.mapper.CartonMapper;
 import com.wms.basic.mapper.ItemMapper;
 import com.wms.basic.service.ApprovalService;
+import com.wms.basic.service.WarehouseProfileService;
+import com.wms.integration.client.SrmReceiptClient;
+import com.wms.integration.client.TmsShipmentClient;
 import com.wms.common.ApprovalStatus;
 import com.wms.common.BizException;
 import com.wms.common.CodeGenerator;
@@ -21,6 +24,8 @@ import com.wms.outbound.entity.Package;
 import com.wms.outbound.entity.PickTask;
 import com.wms.outbound.entity.ShipOrder;
 import com.wms.outbound.entity.ShipOrderLine;
+import com.wms.outbound.entity.WaveStrategy;
+import com.wms.outbound.mapper.WaveStrategyMapper;
 import com.wms.outbound.mapper.PackageMapper;
 import com.wms.outbound.mapper.PickTaskMapper;
 import com.wms.outbound.mapper.ShipOrderLineMapper;
@@ -57,6 +62,10 @@ public class ShipOrderService {
     private final SerialService serialService;
     private final CodeGenerator codeGenerator;
     private final ApprovalService approvalService;
+    private final WarehouseProfileService profiles;
+    private final WaveStrategyMapper strategyMapper;
+    private final SrmReceiptClient srmReceiptClient;
+    private final TmsShipmentClient tmsShipmentClient;
 
     // ------------------------------------------------------------------ CRUD
 
@@ -392,6 +401,9 @@ public class ShipOrderService {
         if (cartonCode != null && !cartonCode.trim().isEmpty()) {
             order.setCartonCode(consumeCarton(order, cartonCode, packageCount).getCode());
         }
+        if (grossWeight == null && skipSingleWeigh(order)) {
+            grossWeight = theoreticalWeight(order);
+        }
         order.setPackageCount(packageCount);
         order.setGrossWeight(grossWeight);
         if (carrier != null && !carrier.trim().isEmpty()) {
@@ -509,7 +521,35 @@ public class ShipOrderService {
                 .set(Package::getStatus, "SHIPPED")
                 .set(order.getCarrier() != null, Package::getCarrier, order.getCarrier())
                 .set(order.getTrackingNo() != null, Package::getTrackingNo, order.getTrackingNo()));
-        return load(orderId);
+        ShipOrder shippedOrder = load(orderId);
+        srmReceiptClient.pushRtv(shippedOrder);
+        tmsShipmentClient.push(shippedOrder);
+        return shippedOrder;
+    }
+
+    /** 快消仓且存在启用的单件免称重策略时，单品单件留空毛重按物料重量计入。 */
+    private boolean skipSingleWeigh(ShipOrder order) {
+        if (!"SISQ".equals(order.getOrderShape()) || !profiles.isFmcg(order.getWarehouseCode())) {
+            return false;
+        }
+        Long count = strategyMapper.selectCount(new LambdaQueryWrapper<WaveStrategy>()
+                .eq(WaveStrategy::getEnabled, true)
+                .eq(WaveStrategy::getSkipSingleWeigh, true));
+        return count != null && count > 0;
+    }
+
+    private BigDecimal theoreticalWeight(ShipOrder order) {
+        BigDecimal sum = BigDecimal.ZERO;
+        boolean any = false;
+        for (ShipOrderLine line : order.getLines()) {
+            Item item = itemMapper.selectOne(new LambdaQueryWrapper<Item>()
+                    .eq(Item::getOwnerCode, order.getOwnerCode()).eq(Item::getCode, line.getItemCode()).last("LIMIT 1"));
+            if (item != null && item.getWeight() != null && line.getPickedQty() != null) {
+                sum = sum.add(item.getWeight().multiply(line.getPickedQty()));
+                any = true;
+            }
+        }
+        return any ? sum : null;
     }
 
     /** 撤销复核打包: PACKED -> PICKED (包材已扣减的不回滚) */

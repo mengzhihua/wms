@@ -146,6 +146,7 @@ export const report = {
   kpi: (params) => http.get('/report/kpi', { params }),
   abc: (params) => http.get('/report/abc', { params }),
   labor: (params) => http.get('/report/labor', { params }),
+  vmiLiability: (params) => http.get('/report/vmi-liability', { params }),
   laborRates: () => http.get('/report/labor-rate'),
   saveLaborRate: (data) => http.post('/report/labor-rate', data)
 }

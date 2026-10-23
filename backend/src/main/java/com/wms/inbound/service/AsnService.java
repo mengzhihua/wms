@@ -326,6 +326,11 @@ public class AsnService {
                 line.getItemCode(), lot, reservedByPendingTasks(asn.getWarehouseCode()), qty));
         task.setQty(qty);
         task.setStatus("NEW");
+        Item handled = itemMapper.selectOne(new LambdaQueryWrapper<Item>()
+                .eq(Item::getOwnerCode, asn.getOwnerCode()).eq(Item::getCode, line.getItemCode()).last("LIMIT 1"));
+        if (profiles.isBulky(asn.getWarehouseCode()) && handled != null && "PALLET".equals(handled.getHandlingClass())) {
+            task.setEquipment("FORKLIFT");
+        }
         taskMapper.insert(task);
         return task;
     }

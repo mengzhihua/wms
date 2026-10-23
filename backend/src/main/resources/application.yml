@@ -59,6 +59,10 @@ wms:
     mode: ${WMS_SRM_MODE:mock}
     base-url: ${WMS_SRM_URL:http://localhost:8087}
     api-key: ${WMS_SRM_API_KEY:srm-wms-key}
+  tms:
+    mode: ${WMS_TMS_MODE:mock}
+    base-url: ${WMS_TMS_URL:http://localhost:8082}
+    api-key: ${WMS_TMS_API_KEY:tms-wms-key}
 
 ---
 spring:

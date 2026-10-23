@@ -6,6 +6,7 @@ import com.wms.basic.mapper.VmiAgreementMapper;
 import com.wms.basic.service.WarehouseProfileService;
 import com.wms.common.BizException;
 import com.wms.inbound.entity.Asn;
+import com.wms.integration.client.SrmReceiptClient;
 import com.wms.inbound.entity.AsnLine;
 import com.wms.inbound.mapper.AsnLineMapper;
 import com.wms.inbound.mapper.AsnMapper;
@@ -33,6 +34,7 @@ public class VmiService {
     private final AsnLineMapper asnLineMapper;
     private final AsnService asnService;
     private final WarehouseProfileService profiles;
+    private final SrmReceiptClient srmReceiptClient;
 
     @Transactional
     public List<Asn> suggest(String warehouse) {
@@ -69,7 +71,9 @@ public class VmiService {
             line.setItemCode(agreement.getItemCode());
             line.setExpectedQty(qty);
             asn.setLines(Collections.singletonList(line));
-            created.add(asnService.create(asn));
+            Asn saved = asnService.create(asn);
+            srmReceiptClient.pushSuggest(saved);
+            created.add(saved);
         }
         return created;
     }

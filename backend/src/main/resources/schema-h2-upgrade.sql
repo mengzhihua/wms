@@ -37,6 +37,10 @@ ALTER TABLE wms_ship_order ADD COLUMN order_shape VARCHAR(16);
 ALTER TABLE wms_ship_order ADD COLUMN delivery_window VARCHAR(64);
 ALTER TABLE wms_ship_order ADD COLUMN install_required BOOLEAN DEFAULT FALSE;
 ALTER TABLE wms_inventory_txn ALTER COLUMN txn_type VARCHAR(32);
+ALTER TABLE wms_putaway_task ADD COLUMN equipment VARCHAR(32);
+ALTER TABLE wms_replenish_task ADD COLUMN equipment VARCHAR(32);
+ALTER TABLE wms_wave_strategy ADD COLUMN skip_single_weigh BOOLEAN DEFAULT FALSE;
+ALTER TABLE wms_appointment ADD COLUMN equipment VARCHAR(32);
 CREATE UNIQUE INDEX IF NOT EXISTS uk_inv_grain ON wms_inventory (
   warehouse_code, location_code, owner_code, item_code, lot_no, status, ref_no, lpn_code, ownership, expiry_date
 );

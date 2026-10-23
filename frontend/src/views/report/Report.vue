@@ -4,6 +4,9 @@
       <div class="toolbar">
         <el-select v-model="query.warehouseCode" placeholder="仓库" clearable @change="load"><el-option v-for="o in options.warehouse" :key="o.value" :label="o.label" :value="o.value" /></el-select>
         <el-select v-model="query.ownerCode" placeholder="货主" clearable @change="load"><el-option v-for="o in options.owner" :key="o.value" :label="o.label" :value="o.value" /></el-select>
+        <el-select v-if="tab === 'aging'" v-model="query.ownership" placeholder="物权" clearable @change="load" style="width: 140px">
+          <el-option value="VENDOR" label="供应商寄售" /><el-option value="CUSTOMER" label="货主库存" />
+        </el-select>
         <el-input-number v-model="query.days" :min="1" :max="365" @change="load" /><span style="line-height: 32px">天</span>
         <el-button type="primary" @click="load"><el-icon><Refresh /></el-icon>刷新</el-button>
       </div>
@@ -33,11 +36,19 @@
             <el-table-column prop="b180p" label=">180天" width="90" />
             <el-table-column prop="maxAge" label="最长库龄" width="90" />
           </el-table>
+          <h4 v-if="liability.length">寄售负债（数量 × 库龄天数，不进按件操作费）</h4>
+          <el-table v-if="liability.length" :data="liability" border stripe size="small" max-height="240">
+            <el-table-column prop="itemCode" label="物料" width="110" />
+            <el-table-column prop="qty" label="数量" width="90" />
+            <el-table-column prop="ageDays" label="库龄(天)" width="90" />
+            <el-table-column prop="statedAmount" label="负债计量" width="110" />
+          </el-table>
           <h4>明细（按库龄倒序）</h4>
           <el-table :data="aging.detail || []" border stripe size="small" max-height="360">
             <el-table-column prop="itemCode" label="物料" width="110" />
             <el-table-column prop="locationCode" label="库位" width="110" />
             <el-table-column prop="lotNo" label="批次" width="120" />
+            <el-table-column prop="ownership" label="物权" width="100" />
             <el-table-column prop="qty" label="数量" width="90" />
             <el-table-column prop="receiveDate" label="收货日期" width="120" />
             <el-table-column prop="ageDays" label="库龄(天)" width="90" />
@@ -128,7 +139,8 @@ const { options } = useOptions(['warehouse', 'owner'])
 const tab = ref('kpi')
 const loading = ref(false)
 const saving = ref(false)
-const query = reactive({ warehouseCode: '', ownerCode: '', days: 30 })
+const query = reactive({ warehouseCode: '', ownerCode: '', ownership: '', days: 30 })
+const liability = ref([])
 const kpi = ref({})
 const aging = ref({})
 const expiry = ref([])
@@ -141,7 +153,10 @@ async function load() {
   loading.value = true
   try {
     if (tab.value === 'kpi') kpi.value = await report.kpi({ days: query.days })
-    else if (tab.value === 'aging') aging.value = await report.aging(query)
+    else if (tab.value === 'aging') {
+      aging.value = await report.aging(query)
+      liability.value = query.ownership === 'VENDOR' ? await report.vmiLiability(query) : []
+    }
     else if (tab.value === 'expiry') expiry.value = await report.expiry(query)
     else if (tab.value === 'abc') abc.value = await report.abc(query)
     else if (tab.value === 'labor') {

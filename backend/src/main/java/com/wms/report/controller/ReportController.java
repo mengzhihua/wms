@@ -7,6 +7,7 @@ import com.wms.basic.mapper.ItemMapper;
 import com.wms.basic.service.WarehouseProfileService;
 import com.wms.common.BizException;
 import com.wms.common.R;
+import com.wms.integration.client.ConsignmentLiability;
 import com.wms.inbound.entity.PutawayTask;
 import com.wms.inbound.entity.QcTask;
 import com.wms.inbound.mapper.PutawayTaskMapper;
@@ -56,6 +57,15 @@ public class ReportController {
     private final ReplenishTaskMapper replenishMapper;
     private final JdbcTemplate jdbc;
     private final WarehouseProfileService profiles;
+
+    /** 寄售库龄负债。只含供应商物权，不计入按件操作费。 */
+    @GetMapping("/vmi-liability")
+    public R<List<Map<String, Object>>> vmiLiability(@RequestParam(required = false) String warehouseCode) {
+        List<Inventory> vendor = stock(warehouseCode, null).stream()
+                .filter(i -> "VENDOR".equals(i.getOwnership()))
+                .collect(Collectors.toList());
+        return R.ok(ConsignmentLiability.rows(vendor, LocalDate.now()));
+    }
 
     /** 库龄：按物料汇总各库龄段数量，并返回明细（含库龄天数） */
     @GetMapping("/aging")

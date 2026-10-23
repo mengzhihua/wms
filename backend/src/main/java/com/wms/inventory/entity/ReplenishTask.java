@@ -24,4 +24,6 @@ public class ReplenishTask extends BaseEntity {
     /** NEW / IN_TRANSIT / DONE / CANCELLED */
     private String status;
     private String remark;
+    /** 叉车等设备。大件仓补货为 FORKLIFT */
+    private String equipment;
 }

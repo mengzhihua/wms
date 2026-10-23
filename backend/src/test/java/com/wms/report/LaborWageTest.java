@@ -13,6 +13,13 @@ class LaborWageTest {
     }
 
     @Test
+    void bulkyWarehousePaysByHandlingCount() {
+        assertEquals(0, LaborWage.payableQty("BULKY", new BigDecimal("10"), 2).compareTo(new BigDecimal("2")));
+        assertEquals(0, LaborWage.payableQty("FMCG", new BigDecimal("10"), 2).compareTo(new BigDecimal("10")));
+        assertEquals(0, LaborWage.payableQty("GENERAL", new BigDecimal("10"), 2).compareTo(new BigDecimal("10")));
+    }
+
+    @Test
     void unknownNodeOrEmptyQtyPaysNothing() {
         assertEquals(0, LaborWage.pay("COUNT", new BigDecimal("8")).compareTo(new BigDecimal("0.00")));
         assertEquals(0, LaborWage.pay("SHIP", null).compareTo(new BigDecimal("0.00")));

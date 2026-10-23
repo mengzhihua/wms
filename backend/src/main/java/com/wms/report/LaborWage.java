@@ -29,6 +29,14 @@ public final class LaborWage {
         return BigDecimal.ZERO;
     }
 
+    /** 大件仓按作业笔数（托）计价，其余仓按件数。 */
+    public static BigDecimal payableQty(String profile, BigDecimal qty, long txnCount) {
+        if ("BULKY".equals(profile)) {
+            return BigDecimal.valueOf(Math.max(txnCount, 0));
+        }
+        return qty == null ? BigDecimal.ZERO : qty;
+    }
+
     public static BigDecimal pay(String txnType, BigDecimal qty) {
         if (qty == null || qty.signum() <= 0) {
             return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);

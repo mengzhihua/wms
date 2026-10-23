@@ -7,6 +7,7 @@ import com.wms.common.BizException;
 import com.wms.common.R;
 import com.wms.inventory.mapper.InventoryMapper;
 import com.wms.inventory.service.ReplenishService;
+import com.wms.inventory.service.VmiService;
 import com.wms.inventory.entity.ReplenishTask;
 import com.wms.outbound.entity.ShipOrder;
 import com.wms.outbound.entity.ShipOrderLine;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
@@ -41,6 +43,7 @@ public class OpenIrController {
     private final ShipOrderLineMapper shipOrderLineMapper;
     private final InventoryMapper inventoryMapper;
     private final ItemMapper itemMapper;
+    private final VmiService vmiService;
     private final ConcurrentHashMap<String, Object> actionCache = new ConcurrentHashMap<String, Object>();
 
     @Data
@@ -62,6 +65,12 @@ public class OpenIrController {
         private String type;
         private String idempotencyKey;
         private BigDecimal qty;
+    }
+
+    /** 供应商只看自己的协议和寄售库存。 */
+    @GetMapping("/vmi")
+    public R<Map<String, Object>> vmi(@RequestParam String supplierCode) {
+        return R.ok(vmiService.visible(supplierCode));
     }
 
     @GetMapping("/snapshots")

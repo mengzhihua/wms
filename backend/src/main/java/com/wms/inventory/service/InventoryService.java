@@ -2,8 +2,17 @@ package com.wms.inventory.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.wms.basic.entity.Item;
 import com.wms.basic.entity.Location;
+import com.wms.basic.entity.Lpn;
+import com.wms.basic.entity.PickSlot;
+import com.wms.basic.entity.VmiAgreement;
+import com.wms.basic.mapper.ItemMapper;
 import com.wms.basic.mapper.LocationMapper;
+import com.wms.basic.mapper.LpnMapper;
+import com.wms.basic.mapper.PickSlotMapper;
+import com.wms.basic.mapper.VmiAgreementMapper;
+import com.wms.basic.service.WarehouseProfileService;
 import com.wms.common.BizException;
 import com.wms.inventory.entity.Inventory;
 import com.wms.inventory.entity.InventoryTxn;
@@ -18,11 +27,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Core stock engine. Every stock change goes through here and writes a transaction record.
@@ -33,11 +44,19 @@ public class InventoryService {
 
     public static final String AVAILABLE = "AVAILABLE";
     public static final String FROZEN = "FROZEN";
+    public static final String DAMAGE = "DAMAGE";
+    public static final String CUSTOMER = "CUSTOMER";
+    public static final String VENDOR = "VENDOR";
 
     private final InventoryMapper inventoryMapper;
     private final InventoryTxnMapper txnMapper;
     private final LocationMapper locationMapper;
     private final SerialMapper serialMapper;
+    private final ItemMapper itemMapper;
+    private final LpnMapper lpnMapper;
+    private final PickSlotMapper pickSlotMapper;
+    private final VmiAgreementMapper vmiAgreementMapper;
+    private final WarehouseProfileService profiles;
 
     // ------------------------------------------------------------------ basic movements
 
@@ -45,33 +64,56 @@ public class InventoryService {
     @Transactional
     public Inventory add(String warehouse, String location, String owner, String item, String lot,
                          BigDecimal qty, LocalDate expiry, String refNo, String txnType, BigDecimal reserved) {
-        Inventory inv = upsert(warehouse, location, owner, item, lot, qty, expiry, refNo, reserved);
+        return add(warehouse, location, owner, item, lot, qty, expiry, refNo, txnType, reserved, "", CUSTOMER);
+    }
+
+    /** 带容器和物权入库。lpn 空表示散货，ownership 空按货主库存。 */
+    @Transactional
+    public Inventory add(String warehouse, String location, String owner, String item, String lot,
+                         BigDecimal qty, LocalDate expiry, String refNo, String txnType, BigDecimal reserved,
+                         String lpnCode, String ownership) {
+        Inventory inv = upsert(warehouse, location, owner, item, lot, qty, expiry, refNo, reserved, lpnCode, ownership, AVAILABLE);
         txn(txnType, inv, null, location, qty, refNo, null);
+        if (lpnCode != null && !lpnCode.isEmpty()) {
+            relocateLpn(lpnCode, warehouse, location);
+        }
         return inv;
     }
 
     private Inventory upsert(String warehouse, String location, String owner, String item, String lot,
                              BigDecimal qty, LocalDate expiry, String refNo, BigDecimal reserved) {
+        return upsert(warehouse, location, owner, item, lot, qty, expiry, refNo, reserved, "", CUSTOMER, AVAILABLE);
+    }
+
+    private Inventory upsert(String warehouse, String location, String owner, String item, String lot,
+                             BigDecimal qty, LocalDate expiry, String refNo, BigDecimal reserved,
+                             String lpnCode, String ownership, String status) {
         requirePositive(qty);
         Location loc = lockLocation(warehouse, location);
         if ("DISABLED".equals(loc.getStatus())) {
             throw new BizException("库位 " + location + " 已禁用");
         }
         String lotNo = lot == null ? "" : lot;
+        String lpn = lpnCode == null ? "" : lpnCode;
+        String own = ownership == null || ownership.isEmpty() ? CUSTOMER : ownership;
+        String st = status == null || status.isEmpty() ? AVAILABLE : status;
+        String ref = refNo == null ? "" : refNo;
         Inventory inv = inventoryMapper.selectOne(new LambdaQueryWrapper<Inventory>()
                 .eq(Inventory::getWarehouseCode, warehouse)
                 .eq(Inventory::getLocationCode, location)
                 .eq(Inventory::getOwnerCode, owner)
                 .eq(Inventory::getItemCode, item)
                 .eq(Inventory::getLotNo, lotNo)
-                .eq(Inventory::getRefNo, refNo == null ? "" : refNo)
-                .eq(Inventory::getStatus, AVAILABLE)
+                .eq(Inventory::getRefNo, ref)
+                .eq(Inventory::getStatus, st)
+                .eq(Inventory::getLpnCode, lpn)
+                .eq(Inventory::getOwnership, own)
                 .eq(expiry != null, Inventory::getExpiryDate, expiry)
                 .isNull(expiry == null, Inventory::getExpiryDate)
                 .last("LIMIT 1"));
         if (inv != null) {
             inv = tryLockInventory(inv.getId());
-            if (inv != null && !AVAILABLE.equals(inv.getStatus())) {
+            if (inv != null && !st.equals(inv.getStatus())) {
                 inv = null;
             }
         }
@@ -84,10 +126,12 @@ public class InventoryService {
             inv.setLotNo(lotNo);
             inv.setQty(qty);
             inv.setAllocatedQty(reserved == null ? BigDecimal.ZERO : reserved);
-            inv.setStatus(AVAILABLE);
+            inv.setStatus(st);
             inv.setReceiveDate(LocalDate.now());
             inv.setExpiryDate(expiry);
-            inv.setRefNo(refNo == null ? "" : refNo);
+            inv.setRefNo(ref);
+            inv.setLpnCode(lpn);
+            inv.setOwnership(own);
             inventoryMapper.insert(inv);
         } else {
             requireNotCountLocked(inv);
@@ -136,19 +180,28 @@ public class InventoryService {
             throw new BizException("冻结库存不可移动");
         }
         requireNotCountLocked(src);
-        if (src.getAvailableQty().compareTo(qty) < 0) {
-            throw new BizException("可用库存不足，可用 " + src.getAvailableQty());
+        BigDecimal movable = DAMAGE.equals(src.getStatus())
+                ? nz(src.getQty()).subtract(nz(src.getAllocatedQty())) : src.getAvailableQty();
+        if (movable.compareTo(qty) < 0) {
+            throw new BizException("可用库存不足，可用 " + movable);
         }
         if (toLocation.equals(src.getLocationCode())) {
             throw new BizException("目标库位与源库位相同");
         }
         Location target = lockLocation(src.getWarehouseCode(), toLocation);
         checkMixRules(target, src);
+        boolean fullLpn = src.getQty().compareTo(qty) == 0 && src.getLpnCode() != null && !src.getLpnCode().isEmpty();
+        String destLpn = fullLpn ? src.getLpnCode() : "";
+        assertFits(target, src.getOwnerCode(), src.getItemCode(), qty, destLpn);
 
         src.setQty(src.getQty().subtract(qty));
         saveOrRemove(src);
         Inventory dst = upsert(src.getWarehouseCode(), toLocation, src.getOwnerCode(), src.getItemCode(), src.getLotNo(),
-                qty, src.getExpiryDate(), targetRefNo == null ? src.getRefNo() : targetRefNo, null);
+                qty, src.getExpiryDate(), targetRefNo == null ? src.getRefNo() : targetRefNo, null,
+                destLpn, src.getOwnership(), src.getStatus());
+        if (fullLpn) {
+            relocateLpn(destLpn, src.getWarehouseCode(), toLocation);
+        }
         if (src.getReceiveDate() != null
                 && (dst.getReceiveDate() == null || src.getReceiveDate().isBefore(dst.getReceiveDate()))) {
             dst.setReceiveDate(src.getReceiveDate());
@@ -266,11 +319,18 @@ public class InventoryService {
     }
 
     /**
-     * Allocation strategy: available stock in storage-type locations, FIFO by expiry then receive date then pick sequence.
-     * Increments allocatedQty; returns the pieces that were reserved (may be less than requested).
+     * 分配：只从存储位和拣货位、引用号为空的可用库存出。
+     * 顺序为效期、收货日、拣货位优先、拣货顺序。大件整托在数量够一整托时排在最前。
+     * 销售单默认只分货主库存；VMI 且协议为发运转移时可以分寄售库存。退供只分寄售库存。
      */
     @Transactional
     public List<Allocation> allocate(String warehouse, String owner, String item, String lot, BigDecimal qty, String refNo) {
+        return allocate(warehouse, owner, item, lot, qty, refNo, null);
+    }
+
+    @Transactional
+    public List<Allocation> allocate(String warehouse, String owner, String item, String lot, BigDecimal qty,
+                                     String refNo, String orderType) {
         LambdaQueryWrapper<Inventory> qw = new LambdaQueryWrapper<Inventory>()
                 .eq(Inventory::getWarehouseCode, warehouse)
                 .eq(Inventory::getOwnerCode, owner)
@@ -281,15 +341,24 @@ public class InventoryService {
             qw.eq(Inventory::getLotNo, lot);
         }
         List<Inventory> candidates = inventoryMapper.selectList(qw);
+        String ownMode = ownershipMode(warehouse, owner, item, orderType);
+        candidates.removeIf(c -> !ownershipAllowed(c, ownMode));
         List<Location> locs = locationMapper.selectList(new LambdaQueryWrapper<Location>()
                 .eq(Location::getWarehouseCode, warehouse).in(Location::getType, "STORAGE", "PICKING")
                 .eq(Location::getStatus, "AVAILABLE"));
         List<String> pickable = new ArrayList<>();
         locs.forEach(l -> pickable.add(l.getCode()));
         candidates.removeIf(c -> !pickable.contains(c.getLocationCode()) || c.getAvailableQty().signum() <= 0);
+        Item master = findItem(owner, item);
+        BigDecimal pack = master == null || master.getPackQty() == null ? BigDecimal.ZERO : master.getPackQty();
+        boolean wholePallet = profiles.isBulky(warehouse) && master != null && "PALLET".equals(master.getHandlingClass())
+                && pack.signum() > 0 && qty.compareTo(pack) >= 0;
         candidates.sort(Comparator
-                .comparing((Inventory i) -> i.getExpiryDate() == null ? LocalDate.MAX : i.getExpiryDate())
+                .comparing((Inventory i) -> wholePallet && i.getAvailableQty().compareTo(pack) >= 0 ? 0 : 1)
+                .thenComparing(i -> i.getExpiryDate() == null ? LocalDate.MAX : i.getExpiryDate())
                 .thenComparing(i -> i.getReceiveDate() == null ? LocalDate.MIN : i.getReceiveDate())
+                .thenComparing(i -> locationRank(locs, i.getLocationCode()))
+                .thenComparing(i -> pickSeq(locs, i.getLocationCode()))
                 .thenComparing(Inventory::getId));
 
         List<Allocation> result = new ArrayList<>();
@@ -345,6 +414,17 @@ public class InventoryService {
      *                 treated as occupied so parallel receipts do not all get the same empty bin
      */
     public String suggestPutawayLocation(String warehouse, String owner, String item, String lot, List<Inventory> reserved) {
+        return suggestPutawayLocation(warehouse, owner, item, lot, reserved, null);
+    }
+
+    /** qty 用于承重、容积和快消拣货位上限。放不下的库位不推荐。 */
+    public String suggestPutawayLocation(String warehouse, String owner, String item, String lot,
+                                          List<Inventory> reserved, BigDecimal qty) {
+        Item master = findItem(owner, item);
+        String slot = fmcgPickFace(warehouse, owner, item, master, qty);
+        if (slot != null) {
+            return slot;
+        }
         List<Inventory> same = inventoryMapper.selectList(new LambdaQueryWrapper<Inventory>()
                 .eq(Inventory::getWarehouseCode, warehouse)
                 .eq(Inventory::getOwnerCode, owner)
@@ -357,28 +437,30 @@ public class InventoryService {
                 .eq(Location::getStatus, "AVAILABLE")
                 .orderByAsc(Location::getPickSeq).orderByAsc(Location::getCode));
         for (Inventory inv : same) {
-            if (storage.stream().anyMatch(l -> l.getCode().equals(inv.getLocationCode()))) {
-                return inv.getLocationCode();
+            Location held = storage.stream().filter(l -> l.getCode().equals(inv.getLocationCode())).findFirst().orElse(null);
+            if (held != null && fits(held, owner, item, qty, "")) {
+                return held.getCode();
             }
         }
         List<Inventory> occupied = new ArrayList<>(inventoryMapper.selectList(new LambdaQueryWrapper<Inventory>()
                 .eq(Inventory::getWarehouseCode, warehouse).gt(Inventory::getQty, 0)));
         occupied.addAll(reserved);
+        List<Location> candidates = new ArrayList<>();
         for (Location l : storage) {
-            boolean empty = occupied.stream().noneMatch(i -> i.getLocationCode().equals(l.getCode()));
-            if (empty) {
-                return l.getCode();
+            if (!mixOk(l, occupied, owner, item)) {
+                continue;
             }
-            boolean sameOnly = occupied.stream().filter(i -> i.getLocationCode().equals(l.getCode()))
-                    .allMatch(i -> i.getItemCode().equals(item) && i.getOwnerCode().equals(owner));
-            if (sameOnly && Boolean.TRUE.equals(l.getMixLot())) {
-                return l.getCode();
+            if (!fits(l, owner, item, qty, "")) {
+                continue;
             }
-            if (!sameOnly && Boolean.TRUE.equals(l.getMixSku())) {
-                return l.getCode();
-            }
+            candidates.add(l);
         }
-        return null;
+        candidates.sort(Comparator
+                .comparing((Location l) -> occupied.stream().anyMatch(i -> l.getCode().equals(i.getLocationCode())) ? 1 : 0)
+                .thenComparing(l -> abcRank(l, master))
+                .thenComparing(l -> l.getPickSeq() == null ? Integer.MAX_VALUE : l.getPickSeq())
+                .thenComparing(Location::getCode));
+        return candidates.isEmpty() ? null : candidates.get(0).getCode();
     }
 
     // ------------------------------------------------------------------ helpers
@@ -491,5 +573,302 @@ public class InventoryService {
         if (qty == null || qty.signum() <= 0) {
             throw new BizException("数量必须大于0");
         }
+    }
+
+    /** 寄售消耗：先记物权转移，再按数量扣减。剩余仍属供应商。 */
+    @Transactional
+    public void issueVendor(Long inventoryId, BigDecimal qty, String refNo) {
+        requirePositive(qty);
+        Inventory inv = lockInventory(inventoryId);
+        String own = inv.getOwnership() == null || inv.getOwnership().isEmpty() ? CUSTOMER : inv.getOwnership();
+        if (!VENDOR.equals(own)) {
+            throw new BizException("消耗只能扣供应商物权库存");
+        }
+        if (inv.getAvailableQty().compareTo(qty) < 0) {
+            throw new BizException("寄售可用库存不足");
+        }
+        txn("OWNERSHIP_TRANSFER", inv, inv.getLocationCode(), inv.getLocationCode(), qty, refNo, "VENDOR -> CUSTOMER");
+        deduct(inventoryId, qty, false, refNo, "CONSUME");
+    }
+
+    /** 破损库存不可分配。状态保持 DAMAGE，可用量计算已经排除。 */
+    @Transactional
+    public Inventory markDamage(Long inventoryId, String reason) {
+        Inventory inv = lockInventory(inventoryId);
+        requireNotCountLocked(inv);
+        if (DAMAGE.equals(inv.getStatus())) {
+            return inv;
+        }
+        if (!AVAILABLE.equals(inv.getStatus())) {
+            throw new BizException("只有可用库存可以转破损");
+        }
+        inv.setStatus(DAMAGE);
+        inventoryMapper.updateById(inv);
+        txn("DAMAGE", inv, inv.getLocationCode(), inv.getLocationCode(), inv.getQty(), null, reason);
+        return inv;
+    }
+
+    /** 物权转移。数量不变，单独记 OWNERSHIP_TRANSFER。目标行已存在时合并。 */
+    @Transactional
+    public Inventory transferOwnership(Long inventoryId, String ownership, String refNo) {
+        Inventory inv = lockInventory(inventoryId);
+        String targetOwn = ownership == null || ownership.isEmpty() ? CUSTOMER : ownership;
+        String current = inv.getOwnership() == null || inv.getOwnership().isEmpty() ? CUSTOMER : inv.getOwnership();
+        if (targetOwn.equals(current)) {
+            return inv;
+        }
+        txn("OWNERSHIP_TRANSFER", inv, inv.getLocationCode(), inv.getLocationCode(), inv.getQty(), refNo,
+                current + " -> " + targetOwn);
+        Inventory other = inventoryMapper.selectOne(new LambdaQueryWrapper<Inventory>()
+                .eq(Inventory::getWarehouseCode, inv.getWarehouseCode())
+                .eq(Inventory::getLocationCode, inv.getLocationCode())
+                .eq(Inventory::getOwnerCode, inv.getOwnerCode())
+                .eq(Inventory::getItemCode, inv.getItemCode())
+                .eq(Inventory::getLotNo, inv.getLotNo() == null ? "" : inv.getLotNo())
+                .eq(Inventory::getRefNo, inv.getRefNo() == null ? "" : inv.getRefNo())
+                .eq(Inventory::getStatus, inv.getStatus())
+                .eq(Inventory::getLpnCode, inv.getLpnCode() == null ? "" : inv.getLpnCode())
+                .eq(Inventory::getOwnership, targetOwn)
+                .eq(inv.getExpiryDate() != null, Inventory::getExpiryDate, inv.getExpiryDate())
+                .isNull(inv.getExpiryDate() == null, Inventory::getExpiryDate)
+                .ne(Inventory::getId, inv.getId())
+                .last("LIMIT 1"));
+        if (other == null) {
+            inv.setOwnership(targetOwn);
+            inventoryMapper.updateById(inv);
+            return inv;
+        }
+        other = lockInventory(other.getId());
+        other.setQty(other.getQty().add(inv.getQty()));
+        other.setAllocatedQty(nz(other.getAllocatedQty()).add(nz(inv.getAllocatedQty())));
+        inventoryMapper.updateById(other);
+        inventoryMapper.deleteById(inv.getId());
+        return other;
+    }
+
+    public void assertFits(Location loc, String owner, String itemCode, BigDecimal qty, String incomingLpn) {
+        if (loc == null || qty == null || qty.signum() <= 0) {
+            return;
+        }
+        Item item = findItem(owner, itemCode);
+        if (item == null) {
+            return;
+        }
+        List<Inventory> here = inventoryMapper.selectList(new LambdaQueryWrapper<Inventory>()
+                .eq(Inventory::getWarehouseCode, loc.getWarehouseCode())
+                .eq(Inventory::getLocationCode, loc.getCode())
+                .gt(Inventory::getQty, 0));
+        if (loc.getMaxWeight() != null && loc.getMaxWeight().signum() > 0) {
+            BigDecimal used = measure(here, true);
+            BigDecimal unit = item.getWeight() == null ? BigDecimal.ZERO : item.getWeight();
+            if (used.add(unit.multiply(qty)).compareTo(loc.getMaxWeight()) > 0) {
+                throw new BizException("库位 " + loc.getCode() + " 超承重，上限 " + loc.getMaxWeight() + " kg");
+            }
+        }
+        if (loc.getMaxVolume() != null && loc.getMaxVolume().signum() > 0) {
+            BigDecimal used = measure(here, false);
+            BigDecimal unit = item.getVolume() == null ? BigDecimal.ZERO : item.getVolume();
+            if (used.add(unit.multiply(qty)).compareTo(loc.getMaxVolume()) > 0) {
+                throw new BizException("库位 " + loc.getCode() + " 超容积，上限 " + loc.getMaxVolume() + " m³");
+            }
+        }
+        if (loc.getPalletSlots() != null && loc.getPalletSlots() > 0) {
+            long pallets = here.stream().map(Inventory::getLpnCode).filter(s -> s != null && !s.isEmpty()).distinct().count();
+            boolean incoming = incomingLpn != null && !incomingLpn.isEmpty();
+            boolean already = incoming && here.stream().anyMatch(i -> incomingLpn.equals(i.getLpnCode()));
+            int extra = 0;
+            if (incoming && !already) {
+                extra = 1;
+            } else if (!incoming && "PALLET".equals(item.getHandlingClass())) {
+                extra = 1;
+            }
+            if (pallets + extra > loc.getPalletSlots()) {
+                throw new BizException("库位 " + loc.getCode() + " 托盘位不足，上限 " + loc.getPalletSlots());
+            }
+        }
+    }
+
+    public void placeLpn(String code, String type, String warehouse, String location, String owner) {
+        if (code == null || code.trim().isEmpty()) {
+            return;
+        }
+        String lpnCode = code.trim();
+        Lpn lpn = lpnMapper.selectOne(new LambdaQueryWrapper<Lpn>().eq(Lpn::getCode, lpnCode).last("LIMIT 1"));
+        if (lpn == null) {
+            lpn = new Lpn();
+            lpn.setCode(lpnCode);
+            lpn.setType(type == null || type.isEmpty() ? "PALLET" : type);
+            lpn.setWarehouseCode(warehouse);
+            lpn.setLocationCode(location);
+            lpn.setOwnerCode(owner);
+            lpn.setStatus("OPEN");
+            lpnMapper.insert(lpn);
+            return;
+        }
+        lpn.setWarehouseCode(warehouse);
+        lpn.setLocationCode(location);
+        if (owner != null) {
+            lpn.setOwnerCode(owner);
+        }
+        lpnMapper.updateById(lpn);
+    }
+
+    private void relocateLpn(String code, String warehouse, String location) {
+        Lpn lpn = lpnMapper.selectOne(new LambdaQueryWrapper<Lpn>().eq(Lpn::getCode, code).last("LIMIT 1"));
+        if (lpn == null) {
+            return;
+        }
+        lpn.setWarehouseCode(warehouse);
+        lpn.setLocationCode(location);
+        lpnMapper.updateById(lpn);
+    }
+
+    private String fmcgPickFace(String warehouse, String owner, String item, Item master, BigDecimal qty) {
+        if (!profiles.isFmcg(warehouse) || master == null || !"A".equals(master.getAbcClass())) {
+            return null;
+        }
+        PickSlot slot = pickSlotMapper.selectOne(new LambdaQueryWrapper<PickSlot>()
+                .eq(PickSlot::getWarehouseCode, warehouse)
+                .eq(PickSlot::getOwnerCode, owner)
+                .eq(PickSlot::getItemCode, item)
+                .last("LIMIT 1"));
+        if (slot == null) {
+            return null;
+        }
+        Location pick = locationMapper.selectOne(new LambdaQueryWrapper<Location>()
+                .eq(Location::getWarehouseCode, warehouse)
+                .eq(Location::getCode, slot.getLocationCode())
+                .last("LIMIT 1"));
+        if (pick == null || !"PICKING".equals(pick.getType()) || !"AVAILABLE".equals(pick.getStatus())) {
+            return null;
+        }
+        BigDecimal onHand = inventoryMapper.selectList(new LambdaQueryWrapper<Inventory>()
+                        .eq(Inventory::getWarehouseCode, warehouse)
+                        .eq(Inventory::getLocationCode, pick.getCode())
+                        .eq(Inventory::getOwnerCode, owner)
+                        .eq(Inventory::getItemCode, item)
+                        .gt(Inventory::getQty, 0))
+                .stream().map(Inventory::getQty).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal cap = slot.getMaxQty() != null ? slot.getMaxQty()
+                : (master.getMaxStock() != null ? master.getMaxStock() : null);
+        BigDecimal incoming = qty == null ? BigDecimal.ZERO : qty;
+        if (cap != null && onHand.add(incoming).compareTo(cap) > 0) {
+            return null;
+        }
+        if (!fits(pick, owner, item, qty, "")) {
+            return null;
+        }
+        return pick.getCode();
+    }
+
+    private boolean fits(Location loc, String owner, String item, BigDecimal qty, String lpn) {
+        try {
+            assertFits(loc, owner, item, qty, lpn);
+            return true;
+        } catch (BizException ex) {
+            return false;
+        }
+    }
+
+    private static boolean mixOk(Location l, List<Inventory> occupied, String owner, String item) {
+        List<Inventory> here = occupied.stream().filter(i -> l.getCode().equals(i.getLocationCode())).collect(Collectors.toList());
+        if (here.isEmpty()) {
+            return true;
+        }
+        boolean sameOnly = here.stream().allMatch(i -> item.equals(i.getItemCode()) && owner.equals(i.getOwnerCode()));
+        if (sameOnly && Boolean.TRUE.equals(l.getMixLot())) {
+            return true;
+        }
+        return !sameOnly && Boolean.TRUE.equals(l.getMixSku());
+    }
+
+    private static int abcRank(Location loc, Item item) {
+        if (item == null || item.getAbcClass() == null || loc.getAbcClass() == null) {
+            return 1;
+        }
+        return item.getAbcClass().equals(loc.getAbcClass()) ? 0 : 1;
+    }
+
+    private BigDecimal measure(List<Inventory> rows, boolean weight) {
+        BigDecimal sum = BigDecimal.ZERO;
+        for (Inventory row : rows) {
+            Item item = findItem(row.getOwnerCode(), row.getItemCode());
+            if (item == null) {
+                continue;
+            }
+            BigDecimal unit = weight ? item.getWeight() : item.getVolume();
+            if (unit != null) {
+                sum = sum.add(unit.multiply(row.getQty()));
+            }
+        }
+        return sum;
+    }
+
+    private Item findItem(String owner, String code) {
+        if (owner == null || code == null) {
+            return null;
+        }
+        return itemMapper.selectOne(new LambdaQueryWrapper<Item>()
+                .eq(Item::getOwnerCode, owner).eq(Item::getCode, code).last("LIMIT 1"));
+    }
+
+    private String ownershipMode(String warehouse, String owner, String item, String orderType) {
+        if ("RTV".equals(orderType)) {
+            return "VENDOR_ONLY";
+        }
+        if (!profiles.isVmi(warehouse)) {
+            return "CUSTOMER_ONLY";
+        }
+        VmiAgreement agreement = vmiAgreementMapper.selectOne(new LambdaQueryWrapper<VmiAgreement>()
+                .eq(VmiAgreement::getWarehouseCode, warehouse)
+                .eq(VmiAgreement::getOwnerCode, owner)
+                .eq(VmiAgreement::getItemCode, item)
+                .eq(VmiAgreement::getTransferPoint, "SHIP")
+                .last("LIMIT 1"));
+        return agreement == null ? "CUSTOMER_ONLY" : "INCLUDE_VENDOR";
+    }
+
+    private static boolean ownershipAllowed(Inventory inv, String mode) {
+        String own = inv.getOwnership() == null || inv.getOwnership().isEmpty() ? CUSTOMER : inv.getOwnership();
+        if ("VENDOR_ONLY".equals(mode)) {
+            return VENDOR.equals(own);
+        }
+        if ("INCLUDE_VENDOR".equals(mode)) {
+            return CUSTOMER.equals(own) || VENDOR.equals(own);
+        }
+        return CUSTOMER.equals(own);
+    }
+
+    private static int locationRank(List<Location> locs, String code) {
+        for (Location loc : locs) {
+            if (loc.getCode().equals(code)) {
+                return "PICKING".equals(loc.getType()) ? 0 : 1;
+            }
+        }
+        return 1;
+    }
+
+    private static int pickSeq(List<Location> locs, String code) {
+        for (Location loc : locs) {
+            if (loc.getCode().equals(code)) {
+                return loc.getPickSeq() == null ? Integer.MAX_VALUE : loc.getPickSeq();
+            }
+        }
+        return Integer.MAX_VALUE;
+    }
+
+    /** 按箱规向上取整。箱规为空或不超过 1 时保持原数量。 */
+    public static BigDecimal roundUpToPack(BigDecimal qty, BigDecimal pack) {
+        if (qty == null || qty.signum() <= 0) {
+            return BigDecimal.ZERO;
+        }
+        if (pack == null || pack.compareTo(BigDecimal.ONE) <= 0) {
+            return qty;
+        }
+        BigDecimal[] parts = qty.divideAndRemainder(pack);
+        if (parts[1].signum() == 0) {
+            return qty.setScale(3, RoundingMode.HALF_UP);
+        }
+        return parts[0].add(BigDecimal.ONE).multiply(pack);
     }
 }

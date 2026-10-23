@@ -19,6 +19,7 @@
         <el-table-column prop="ownerCode" label="货主" width="90" />
         <el-table-column prop="customerCode" label="客户" width="90" />
         <el-table-column prop="expectedShipDate" label="要求发货" width="110" />
+        <el-table-column prop="orderShape" label="订单结构" width="90" />
         <el-table-column prop="carrier" label="承运商" width="100" />
         <el-table-column prop="totalQty" label="订单量" width="80" />
         <el-table-column prop="allocatedQty" label="已分配" width="80" />
@@ -52,7 +53,9 @@
         <el-form-item label="仓库" required><el-select v-model="form.warehouseCode" style="width: 180px"><el-option v-for="o in options.warehouse" :key="o.value" :label="o.label" :value="o.value" /></el-select></el-form-item>
         <el-form-item label="货主" required><el-select v-model="form.ownerCode" style="width: 180px" @change="form.lines = []"><el-option v-for="o in options.owner" :key="o.value" :label="o.label" :value="o.value" /></el-select></el-form-item>
         <el-form-item label="客户"><el-select v-model="form.customerCode" clearable style="width: 180px"><el-option v-for="o in options.customer" :key="o.value" :label="o.label" :value="o.value" /></el-select></el-form-item>
-        <el-form-item label="类型"><el-select v-model="form.type" style="width: 180px"><el-option label="销售出库" value="SALES" /><el-option label="调拨出库" value="TRANSFER" /><el-option label="退货出库" value="RETURN" /></el-select></el-form-item>
+        <el-form-item label="类型"><el-select v-model="form.type" style="width: 180px"><el-option label="销售出库" value="SALES" /><el-option label="调拨出库" value="TRANSFER" /><el-option label="退货出库" value="RETURN" /><el-option label="退供" value="RTV" /></el-select></el-form-item>
+        <el-form-item label="送装窗口"><el-input v-model="form.deliveryWindow" placeholder="例如 明天 14:00-16:00" style="width: 180px" /></el-form-item>
+        <el-form-item label="需要安装"><el-switch v-model="form.installRequired" /></el-form-item>
         <el-form-item label="优先级"><el-input-number v-model="form.priority" :min="1" :max="9" style="width: 180px" /></el-form-item>
         <el-form-item label="要求发货"><el-date-picker v-model="form.expectedShipDate" type="date" value-format="YYYY-MM-DD" style="width: 180px" /></el-form-item>
         <el-form-item label="承运商"><el-input v-model="form.carrier" style="width: 180px" /></el-form-item>

@@ -36,7 +36,9 @@ public class InventoryController {
                                    @RequestParam(required = false) String ownerCode,
                                    @RequestParam(required = false) String itemCode,
                                    @RequestParam(required = false) String lotNo,
-                                   @RequestParam(required = false) String status) {
+                                   @RequestParam(required = false) String status,
+                                   @RequestParam(required = false) String ownership,
+                                   @RequestParam(required = false) String lpnCode) {
         QueryWrapper<Inventory> qw = new QueryWrapper<>();
         qw.eq(StringUtils.isNotBlank(warehouseCode), "warehouse_code", warehouseCode)
                 .like(StringUtils.isNotBlank(locationCode), "location_code", locationCode)
@@ -44,6 +46,8 @@ public class InventoryController {
                 .like(StringUtils.isNotBlank(itemCode), "item_code", itemCode)
                 .like(StringUtils.isNotBlank(lotNo), "lot_no", lotNo)
                 .eq(StringUtils.isNotBlank(status), "status", status)
+                .eq(StringUtils.isNotBlank(ownership), "ownership", ownership)
+                .eq(StringUtils.isNotBlank(lpnCode), "lpn_code", lpnCode)
                 .orderByAsc("location_code", "item_code", "lot_no");
         return R.ok(inventoryMapper.selectPage(new Page<>(current, size), qw));
     }
@@ -142,5 +146,16 @@ public class InventoryController {
     @PostMapping("/freeze")
     public R<Inventory> freeze(@RequestBody FreezeReq req) {
         return R.ok(inventoryService.setFrozen(req.getInventoryId(), Boolean.TRUE.equals(req.getFrozen()), req.getReason()));
+    }
+
+    @Data
+    public static class DamageReq {
+        private Long inventoryId;
+        private String reason;
+    }
+
+    @PostMapping("/damage")
+    public R<Inventory> damage(@RequestBody DamageReq req) {
+        return R.ok(inventoryService.markDamage(req.getInventoryId(), req.getReason()));
     }
 }

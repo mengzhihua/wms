@@ -26,6 +26,10 @@ public class Inventory extends BaseEntity {
     /** 盘点锁定: 锁定期间不可分配/移库/调整 */
     private Boolean countLock;
     private Long countPlanId;
+    /** 容器编码。空字符串表示散货 */
+    private String lpnCode;
+    /** CUSTOMER 货主已有 / VENDOR 供应商寄售 */
+    private String ownership;
 
     public BigDecimal getAvailableQty() {
         if (!"AVAILABLE".equals(status) || qty == null || Boolean.TRUE.equals(countLock)) {

@@ -17,4 +17,6 @@ public class Warehouse extends BaseEntity {
     private Integer status;
     /** 入库单/出库单需审核后才能收货/分配 */
     private Boolean approvalRequired;
+    /** GENERAL / FMCG / BULKY / VMI。空值按 GENERAL */
+    private String profile;
 }

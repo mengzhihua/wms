@@ -16,6 +16,7 @@ import com.wms.inventory.entity.Inventory;
 import com.wms.inventory.mapper.InventoryMapper;
 import com.wms.inventory.service.InventoryService;
 import com.wms.inventory.service.SerialService;
+import com.wms.outbound.OrderShapes;
 import com.wms.outbound.entity.Package;
 import com.wms.outbound.entity.PickTask;
 import com.wms.outbound.entity.ShipOrder;
@@ -76,6 +77,10 @@ public class ShipOrderService {
         order.setApprovedBy(null);
         order.setApprovedAt(null);
         order.setApprovalRemark(null);
+        order.setOrderShape(OrderShapes.of(order.getLines()));
+        if (order.getInstallRequired() == null) {
+            order.setInstallRequired(false);
+        }
         orderMapper.insert(order);
         saveLines(order);
         return load(order.getId());
@@ -98,6 +103,9 @@ public class ShipOrderService {
         db.setCarrier(order.getCarrier());
         db.setAddress(order.getAddress());
         db.setRemark(order.getRemark());
+        db.setDeliveryWindow(order.getDeliveryWindow());
+        db.setInstallRequired(Boolean.TRUE.equals(order.getInstallRequired()));
+        db.setOrderShape(OrderShapes.of(order.getLines()));
         db.setTotalQty(sum(order.getLines()));
         db.setApprovalStatus(approvalService.initialStatus(db.getWarehouseCode()));
         db.setApprovedBy(null);
@@ -187,7 +195,7 @@ public class ShipOrderService {
                 continue;
             }
             List<InventoryService.Allocation> allocs = inventoryService.allocate(order.getWarehouseCode(),
-                    order.getOwnerCode(), line.getItemCode(), line.getLotNo(), need, order.getCode());
+                    order.getOwnerCode(), line.getItemCode(), line.getLotNo(), need, order.getCode(), order.getType());
             for (InventoryService.Allocation a : allocs) {
                 PickTask t = new PickTask();
                 t.setCode(codeGenerator.next("PK"));
@@ -480,8 +488,13 @@ public class ShipOrderService {
                 .eq(Inventory::getRefNo, order.getCode()));
         BigDecimal shipped = BigDecimal.ZERO;
         for (Inventory inv : staged) {
-            shipped = shipped.add(inv.getQty());
-            inventoryService.deduct(inv.getId(), inv.getQty(), true, order.getCode(), "SHIP");
+            BigDecimal qty = inv.getQty();
+            shipped = shipped.add(qty);
+            Long id = inv.getId();
+            if (InventoryService.VENDOR.equals(inv.getOwnership())) {
+                id = inventoryService.transferOwnership(inv.getId(), InventoryService.CUSTOMER, order.getCode()).getId();
+            }
+            inventoryService.deduct(id, qty, true, order.getCode(), "SHIP");
         }
         for (ShipOrderLine l : load(orderId).getLines()) {
             l.setShippedQty(nz(l.getPickedQty()));

@@ -27,3 +27,16 @@ ALTER TABLE wms_ship_order ADD COLUMN approval_status VARCHAR(16);
 ALTER TABLE wms_ship_order ADD COLUMN approved_by VARCHAR(64);
 ALTER TABLE wms_ship_order ADD COLUMN approved_at TIMESTAMP;
 ALTER TABLE wms_ship_order ADD COLUMN approval_remark VARCHAR(255);
+ALTER TABLE wms_warehouse ADD COLUMN profile VARCHAR(16) DEFAULT 'GENERAL';
+ALTER TABLE wms_location ADD COLUMN handling VARCHAR(16) DEFAULT 'BIN';
+ALTER TABLE wms_location ADD COLUMN pallet_slots INT;
+ALTER TABLE wms_item ADD COLUMN handling_class VARCHAR(16) DEFAULT 'EACH';
+ALTER TABLE wms_inventory ADD COLUMN lpn_code VARCHAR(64) DEFAULT '';
+ALTER TABLE wms_inventory ADD COLUMN ownership VARCHAR(16) DEFAULT 'CUSTOMER';
+ALTER TABLE wms_ship_order ADD COLUMN order_shape VARCHAR(16);
+ALTER TABLE wms_ship_order ADD COLUMN delivery_window VARCHAR(64);
+ALTER TABLE wms_ship_order ADD COLUMN install_required BOOLEAN DEFAULT FALSE;
+ALTER TABLE wms_inventory_txn ALTER COLUMN txn_type VARCHAR(32);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_inv_grain ON wms_inventory (
+  warehouse_code, location_code, owner_code, item_code, lot_no, status, ref_no, lpn_code, ownership, expiry_date
+);

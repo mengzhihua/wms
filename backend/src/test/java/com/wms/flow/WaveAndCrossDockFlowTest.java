@@ -65,6 +65,10 @@ class WaveAndCrossDockFlowTest {
     }
 
     private ShipOrder order(String item, long qty, int priority) {
+        return order(item, qty, priority, null);
+    }
+
+    private ShipOrder order(String item, long qty, int priority, String lot) {
         ShipOrder o = new ShipOrder();
         o.setWarehouseCode("WH01");
         o.setOwnerCode("OWN01");
@@ -73,6 +77,7 @@ class WaveAndCrossDockFlowTest {
         o.setPriority(priority);
         ShipOrderLine l = new ShipOrderLine();
         l.setItemCode(item);
+        l.setLotNo(lot);
         l.setOrderQty(q(qty));
         o.setLines(Collections.singletonList(l));
         return orderService.create(o);
@@ -80,11 +85,11 @@ class WaveAndCrossDockFlowTest {
 
     @Test
     void twoOrdersMergedIntoWaveThenSowedAndShipped() {
-        Asn asn = receiveAndPutaway("SKU003", 100, null);
+        Asn asn = receiveAndPutaway("SKU003", 100, "WAVELOT");
         assertEquals("CLOSED", asn.getStatus());
 
-        ShipOrder o1 = orderService.allocate(order("SKU003", 10, 1).getId());
-        ShipOrder o2 = orderService.allocate(order("SKU003", 15, 5).getId());
+        ShipOrder o1 = orderService.allocate(order("SKU003", 10, 1, "WAVELOT").getId());
+        ShipOrder o2 = orderService.allocate(order("SKU003", 15, 5, "WAVELOT").getId());
         assertEquals("ALLOCATED", o1.getStatus());
         assertEquals("ALLOCATED", o2.getStatus());
 

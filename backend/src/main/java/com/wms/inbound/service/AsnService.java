@@ -4,8 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.wms.basic.entity.Item;
 import com.wms.basic.entity.Location;
+import com.wms.basic.entity.VmiAgreement;
 import com.wms.basic.mapper.ItemMapper;
+import com.wms.basic.mapper.VmiAgreementMapper;
 import com.wms.basic.service.ApprovalService;
+import com.wms.basic.service.WarehouseProfileService;
 import com.wms.common.ApprovalStatus;
 import com.wms.common.BizException;
 import com.wms.common.CodeGenerator;
@@ -53,6 +56,8 @@ public class AsnService {
     private final SerialService serialService;
     private final CodeGenerator codeGenerator;
     private final ApprovalService approvalService;
+    private final WarehouseProfileService profiles;
+    private final VmiAgreementMapper vmiAgreementMapper;
 
     @Autowired(required = false)
     private SrmReceiptClient srmReceiptClient;
@@ -175,6 +180,10 @@ public class AsnService {
         private String locationCode;
         /** 序列号管理物料必填，个数 = qty */
         private List<String> serialNos;
+        /** 可选容器。空表示散货 */
+        private String lpnCode;
+        /** PALLET / CASE / TOTE，缺省 PALLET */
+        private String lpnType;
     }
 
     @Transactional
@@ -216,8 +225,12 @@ public class AsnService {
                 loc = inventoryService.requireLocationByType(asn.getWarehouseCode(), "QC").getCode();
             }
 
+            if (r.getLpnCode() != null && !r.getLpnCode().trim().isEmpty()) {
+                inventoryService.placeLpn(r.getLpnCode(), r.getLpnType(), asn.getWarehouseCode(), loc, asn.getOwnerCode());
+            }
+            String ownership = receiveOwnership(asn, line.getItemCode(), needQc);
             Inventory inv = inventoryService.add(asn.getWarehouseCode(), loc, asn.getOwnerCode(), line.getItemCode(),
-                    lot, r.getQty(), expiry, asn.getCode(), "RECEIVE", null);
+                    lot, r.getQty(), expiry, asn.getCode(), "RECEIVE", null, r.getLpnCode(), ownership);
             if (Boolean.TRUE.equals(item.getSnControl())) {
                 serialService.receive(asn.getOwnerCode(), item.getCode(), lot, loc, asn.getCode(), r.getQty(), r.getSerialNos());
             }
@@ -272,6 +285,31 @@ public class AsnService {
         return saved;
     }
 
+    /** VMI 收货买断且要质检时先记供应商物权，放行后再转货主。其余转移时点收货即为寄售。 */
+    private String receiveOwnership(Asn asn, String itemCode, boolean needQc) {
+        if (!profiles.isVmi(asn.getWarehouseCode())) {
+            return InventoryService.CUSTOMER;
+        }
+        VmiAgreement agreement = agreement(asn.getWarehouseCode(), asn.getOwnerCode(), asn.getSupplierCode(), itemCode);
+        if (agreement == null) {
+            return InventoryService.CUSTOMER;
+        }
+        if ("RECEIPT".equals(agreement.getTransferPoint())) {
+            return needQc ? InventoryService.VENDOR : InventoryService.CUSTOMER;
+        }
+        return InventoryService.VENDOR;
+    }
+
+    private VmiAgreement agreement(String warehouse, String owner, String supplier, String item) {
+        return vmiAgreementMapper.selectOne(new LambdaQueryWrapper<VmiAgreement>()
+                .eq(VmiAgreement::getWarehouseCode, warehouse)
+                .eq(VmiAgreement::getOwnerCode, owner)
+                .eq(supplier != null && !supplier.isEmpty(), VmiAgreement::getSupplierCode, supplier)
+                .eq(VmiAgreement::getItemCode, item)
+                .eq(VmiAgreement::getStatus, 1)
+                .last("LIMIT 1"));
+    }
+
     private PutawayTask createPutawayTask(Asn asn, AsnLine line, String lot, Long inventoryId, String fromLoc, BigDecimal qty) {
         PutawayTask task = new PutawayTask();
         task.setCode(codeGenerator.next("PA"));
@@ -285,7 +323,7 @@ public class AsnService {
         task.setInventoryId(inventoryId);
         task.setFromLocation(fromLoc);
         task.setSuggestLocation(inventoryService.suggestPutawayLocation(asn.getWarehouseCode(), asn.getOwnerCode(),
-                line.getItemCode(), lot, reservedByPendingTasks(asn.getWarehouseCode())));
+                line.getItemCode(), lot, reservedByPendingTasks(asn.getWarehouseCode()), qty));
         task.setQty(qty);
         task.setStatus("NEW");
         taskMapper.insert(task);
@@ -321,6 +359,10 @@ public class AsnService {
             asn.setRejectedQty(nz(asn.getRejectedQty()).add(reject));
         }
         if (pass.signum() > 0) {
+            VmiAgreement agreement = agreement(asn.getWarehouseCode(), asn.getOwnerCode(), asn.getSupplierCode(), task.getItemCode());
+            if (agreement != null && "RECEIPT".equals(agreement.getTransferPoint())) {
+                inv = inventoryService.transferOwnership(inv.getId(), InventoryService.CUSTOMER, asn.getCode());
+            }
             createPutawayTask(asn, line, task.getLotNo(), inv.getId(), task.getLocationCode(), pass);
         }
         lineMapper.updateById(line);

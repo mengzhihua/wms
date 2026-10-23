@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;
 import com.wms.basic.entity.Item;
 import com.wms.basic.mapper.ItemMapper;
+import com.wms.basic.service.WarehouseProfileService;
 import com.wms.common.BizException;
 import com.wms.common.R;
 import com.wms.inbound.entity.PutawayTask;
@@ -54,12 +55,18 @@ public class ReportController {
     private final PickTaskMapper pickMapper;
     private final ReplenishTaskMapper replenishMapper;
     private final JdbcTemplate jdbc;
+    private final WarehouseProfileService profiles;
 
     /** 库龄：按物料汇总各库龄段数量，并返回明细（含库龄天数） */
     @GetMapping("/aging")
     public R<Map<String, Object>> aging(@RequestParam(required = false) String warehouseCode,
-                                        @RequestParam(required = false) String ownerCode) {
+                                        @RequestParam(required = false) String ownerCode,
+                                        @RequestParam(required = false) String ownership) {
         List<Inventory> stock = stock(warehouseCode, ownerCode);
+        if (StringUtils.isNotBlank(ownership)) {
+            stock = stock.stream().filter(i -> ownership.equals(i.getOwnership() == null || i.getOwnership().isEmpty()
+                    ? "CUSTOMER" : i.getOwnership())).collect(Collectors.toList());
+        }
         Map<String, String> names = itemNames(stock);
         LocalDate today = LocalDate.now();
         Map<String, Map<String, Object>> byItem = new LinkedHashMap<>();
@@ -96,6 +103,7 @@ public class ReportController {
             d.put("receiveDate", inv.getReceiveDate());
             d.put("ageDays", age);
             d.put("status", inv.getStatus());
+            d.put("ownership", inv.getOwnership() == null || inv.getOwnership().isEmpty() ? "CUSTOMER" : inv.getOwnership());
             detail.add(d);
         }
         detail.sort((a, b) -> Long.compare((Long) b.get("ageDays"), (Long) a.get("ageDays")));
@@ -270,8 +278,10 @@ public class ReportController {
             String type = String.valueOf(r.get("txn_type"));
             long c = ((Number) r.get("c")).longValue();
             BigDecimal qty = toDecimal(r.get("q"));
-            BigDecimal rate = LaborRateBook.resolve(rates, text(r.get("warehouse_code")), text(r.get("owner_code")), type);
-            BigDecimal pay = LaborRateBook.pay(rate, qty);
+            String warehouse = text(r.get("warehouse_code"));
+            BigDecimal rate = LaborRateBook.resolve(rates, warehouse, text(r.get("owner_code")), type);
+            BigDecimal payQty = LaborWage.payableQty(profiles.profile(warehouse), qty, c);
+            BigDecimal pay = LaborRateBook.pay(rate, payQty);
             m.put(type, toDecimal(m.get(type)).add(qty));
             m.put(type + "_count", longValue(m.get(type + "_count")) + c);
             m.put(type + "_pay", toDecimal(m.get(type + "_pay")).add(pay));

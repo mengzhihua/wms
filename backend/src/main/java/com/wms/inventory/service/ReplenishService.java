@@ -3,8 +3,11 @@ package com.wms.inventory.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.wms.basic.entity.Item;
 import com.wms.basic.entity.Location;
+import com.wms.basic.entity.PickSlot;
 import com.wms.basic.mapper.ItemMapper;
 import com.wms.basic.mapper.LocationMapper;
+import com.wms.basic.mapper.PickSlotMapper;
+import com.wms.basic.service.WarehouseProfileService;
 import com.wms.common.BizException;
 import com.wms.common.CodeGenerator;
 import com.wms.inventory.entity.Inventory;
@@ -36,6 +39,8 @@ public class ReplenishService {
     private final ItemMapper itemMapper;
     private final InventoryService inventoryService;
     private final CodeGenerator codeGenerator;
+    private final WarehouseProfileService profiles;
+    private final PickSlotMapper pickSlotMapper;
 
     /** 扫描仓库(可选货主)下所有设置了安全库存的物料，生成补货任务 */
     @Transactional
@@ -135,14 +140,40 @@ public class ReplenishService {
                             .eq(ReplenishTask::getItemCode, item.getCode())
                             .eq(ReplenishTask::getStatus, "NEW"))
                     .stream().map(ReplenishTask::getQty).reduce(BigDecimal.ZERO, BigDecimal::add);
-            if (pickQty.add(inTransit).compareTo(item.getMinStock()) >= 0) {
+            PickSlot slot = profiles.isFmcg(warehouse) ? pickSlot(warehouse, item) : null;
+            BigDecimal min = slot != null && slot.getMinQty() != null ? slot.getMinQty() : item.getMinStock();
+            BigDecimal max = slot != null && slot.getMaxQty() != null ? slot.getMaxQty() : item.getMaxStock();
+            BigDecimal allocatedStorage = all.stream()
+                    .filter(i -> isType(locs, i.getLocationCode(), "STORAGE"))
+                    .map(i -> i.getAllocatedQty() == null ? BigDecimal.ZERO : i.getAllocatedQty())
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal minGap = min.subtract(pickQty.add(inTransit));
+            if (minGap.signum() < 0) {
+                minGap = BigDecimal.ZERO;
+            }
+            BigDecimal need;
+            if (profiles.isFmcg(warehouse)) {
+                if (minGap.signum() == 0 && allocatedStorage.signum() == 0) {
+                    continue;
+                }
+                BigDecimal target = max != null && max.compareTo(min) > 0 ? max : min.multiply(BigDecimal.valueOf(2));
+                need = minGap.signum() > 0
+                        ? target.subtract(pickQty).subtract(inTransit).max(allocatedStorage)
+                        : allocatedStorage;
+                need = InventoryService.roundUpToPack(need, item.getPackQty());
+            } else {
+                if (pickQty.add(inTransit).compareTo(min) >= 0) {
+                    continue;
+                }
+                BigDecimal target = max != null && max.compareTo(min) > 0 ? max : min.multiply(BigDecimal.valueOf(2));
+                need = target.subtract(pickQty).subtract(inTransit);
+            }
+            if (need.signum() <= 0) {
                 continue;
             }
-            BigDecimal target = item.getMaxStock() != null && item.getMaxStock().compareTo(item.getMinStock()) > 0
-                    ? item.getMaxStock() : item.getMinStock().multiply(BigDecimal.valueOf(2));
-            BigDecimal need = target.subtract(pickQty).subtract(inTransit);
 
-            String toLoc = pickLocationFor(warehouse, item, all, locs);
+            String toLoc = slot != null && isType(locs, slot.getLocationCode(), "PICKING")
+                    ? slot.getLocationCode() : pickLocationFor(warehouse, item, all, locs);
             if (toLoc == null) {
                 continue;
             }
@@ -221,7 +252,7 @@ public class ReplenishService {
         if (!"PICKING".equals(loc.getType())) {
             throw new BizException("补货目标必须是拣货类型库位");
         }
-        inventoryService.move(t.getInventoryId(), t.getQty(), target, t.getCode(), "TRANSFER_IN");
+        inventoryService.move(t.getInventoryId(), t.getQty(), target, t.getCode(), "TRANSFER_IN", "");
         t.setToLocation(target);
         t.setStatus("DONE");
         taskMapper.updateById(t);
@@ -267,6 +298,14 @@ public class ReplenishService {
                 .sorted(Comparator.comparing(Location::getPickSeq, Comparator.nullsLast(Comparator.naturalOrder()))
                         .thenComparing(Location::getCode))
                 .map(Location::getCode).findFirst().orElse(null);
+    }
+
+    private PickSlot pickSlot(String warehouse, Item item) {
+        return pickSlotMapper.selectOne(new LambdaQueryWrapper<PickSlot>()
+                .eq(PickSlot::getWarehouseCode, warehouse)
+                .eq(PickSlot::getOwnerCode, item.getOwnerCode())
+                .eq(PickSlot::getItemCode, item.getCode())
+                .last("LIMIT 1"));
     }
 
     private static boolean isType(Map<String, Location> locs, String code, String type) {

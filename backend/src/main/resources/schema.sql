@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS wms_warehouse (
   phone VARCHAR(32),
   status INT DEFAULT 1,
   approval_required BOOLEAN DEFAULT FALSE,
+  profile VARCHAR(16) DEFAULT 'GENERAL',
   created_at TIMESTAMP,
   updated_at TIMESTAMP,
   CONSTRAINT uk_warehouse_code UNIQUE (code)
@@ -40,6 +41,8 @@ CREATE TABLE IF NOT EXISTS wms_location (
   pick_seq INT DEFAULT 0,
   mix_sku BOOLEAN DEFAULT TRUE,
   mix_lot BOOLEAN DEFAULT TRUE,
+  handling VARCHAR(16) DEFAULT 'BIN',
+  pallet_slots INT,
   status VARCHAR(16) DEFAULT 'AVAILABLE',
   created_at TIMESTAMP,
   updated_at TIMESTAMP,
@@ -78,6 +81,7 @@ CREATE TABLE IF NOT EXISTS wms_item (
   max_stock DECIMAL(18,3),
   qc_required BOOLEAN DEFAULT FALSE,
   sn_control BOOLEAN DEFAULT FALSE,
+  handling_class VARCHAR(16) DEFAULT 'EACH',
   status INT DEFAULT 1,
   created_at TIMESTAMP,
   updated_at TIMESTAMP,
@@ -126,15 +130,20 @@ CREATE TABLE IF NOT EXISTS wms_inventory (
   ref_no VARCHAR(64) DEFAULT '',
   count_lock BOOLEAN DEFAULT FALSE,
   count_plan_id BIGINT,
+  lpn_code VARCHAR(64) DEFAULT '',
+  ownership VARCHAR(16) DEFAULT 'CUSTOMER',
   created_at TIMESTAMP,
   updated_at TIMESTAMP,
   INDEX idx_inv_item (warehouse_code, owner_code, item_code),
-  INDEX idx_inv_loc (warehouse_code, location_code)
+  INDEX idx_inv_loc (warehouse_code, location_code),
+  CONSTRAINT uk_inv_grain UNIQUE (
+    warehouse_code, location_code, owner_code, item_code, lot_no, status, ref_no, lpn_code, ownership, expiry_date
+  )
 );
 
 CREATE TABLE IF NOT EXISTS wms_inventory_txn (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
-  txn_type VARCHAR(16) NOT NULL,
+  txn_type VARCHAR(32) NOT NULL,
   warehouse_code VARCHAR(32),
   owner_code VARCHAR(32),
   item_code VARCHAR(64),
@@ -272,6 +281,9 @@ CREATE TABLE IF NOT EXISTS wms_ship_order (
   gross_weight DECIMAL(18,3),
   packed_at TIMESTAMP,
   shipped_at TIMESTAMP,
+  order_shape VARCHAR(16),
+  delivery_window VARCHAR(64),
+  install_required BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP,
   updated_at TIMESTAMP,
   CONSTRAINT uk_so_code UNIQUE (code)
@@ -696,4 +708,113 @@ CREATE TABLE IF NOT EXISTS wms_labor_rate (
   created_at TIMESTAMP,
   updated_at TIMESTAMP,
   CONSTRAINT uk_labor_rate UNIQUE (warehouse_code, owner_code, txn_type)
+);
+
+-- 固定拣货位（快消）
+CREATE TABLE IF NOT EXISTS wms_pick_slot (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  warehouse_code VARCHAR(32) NOT NULL,
+  owner_code VARCHAR(32) NOT NULL,
+  item_code VARCHAR(64) NOT NULL,
+  location_code VARCHAR(32) NOT NULL,
+  min_qty DECIMAL(18,3),
+  max_qty DECIMAL(18,3),
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP,
+  CONSTRAINT uk_pick_slot UNIQUE (warehouse_code, owner_code, item_code)
+);
+
+-- 承运商截单时刻（0-23）
+CREATE TABLE IF NOT EXISTS wms_carrier_cutoff (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  warehouse_code VARCHAR(32) NOT NULL,
+  carrier VARCHAR(64) NOT NULL,
+  cutoff_hour INT NOT NULL,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP,
+  CONSTRAINT uk_carrier_cutoff UNIQUE (warehouse_code, carrier)
+);
+
+-- 容器：托盘 / 整箱 / 周转箱。库存 lpn_code 为空表示散货
+CREATE TABLE IF NOT EXISTS wms_lpn (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  code VARCHAR(64) NOT NULL,
+  warehouse_code VARCHAR(32) NOT NULL,
+  type VARCHAR(16) NOT NULL,
+  parent_code VARCHAR(64),
+  location_code VARCHAR(32),
+  owner_code VARCHAR(32),
+  status VARCHAR(16) DEFAULT 'OPEN',
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP,
+  CONSTRAINT uk_lpn_code UNIQUE (code)
+);
+
+CREATE TABLE IF NOT EXISTS wms_dock (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  warehouse_code VARCHAR(32) NOT NULL,
+  code VARCHAR(32) NOT NULL,
+  name VARCHAR(128) NOT NULL,
+  status INT DEFAULT 1,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP,
+  CONSTRAINT uk_dock UNIQUE (warehouse_code, code)
+);
+
+CREATE TABLE IF NOT EXISTS wms_appointment (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  code VARCHAR(32) NOT NULL,
+  warehouse_code VARCHAR(32) NOT NULL,
+  dock_code VARCHAR(32) NOT NULL,
+  ref_type VARCHAR(16) NOT NULL,
+  ref_code VARCHAR(64) NOT NULL,
+  window_start TIMESTAMP,
+  window_end TIMESTAMP,
+  status VARCHAR(16) NOT NULL,
+  remark VARCHAR(255),
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP,
+  CONSTRAINT uk_appointment_code UNIQUE (code)
+);
+
+-- VMI 协议。转移时点 RECEIPT / SHIP / CONSUMPTION
+CREATE TABLE IF NOT EXISTS wms_vmi_agreement (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  supplier_code VARCHAR(32) NOT NULL,
+  owner_code VARCHAR(32) NOT NULL,
+  warehouse_code VARCHAR(32) NOT NULL,
+  item_code VARCHAR(64) NOT NULL,
+  min_qty DECIMAL(18,3),
+  max_qty DECIMAL(18,3),
+  reorder_point DECIMAL(18,3),
+  lead_time_days INT,
+  transfer_point VARCHAR(16) NOT NULL,
+  status INT DEFAULT 1,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP,
+  CONSTRAINT uk_vmi_agreement UNIQUE (warehouse_code, supplier_code, owner_code, item_code)
+);
+
+CREATE TABLE IF NOT EXISTS wms_consumption (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  code VARCHAR(32) NOT NULL,
+  warehouse_code VARCHAR(32) NOT NULL,
+  owner_code VARCHAR(32) NOT NULL,
+  supplier_code VARCHAR(32),
+  status VARCHAR(16) NOT NULL,
+  total_qty DECIMAL(18,3),
+  remark VARCHAR(255),
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP,
+  CONSTRAINT uk_consumption_code UNIQUE (code)
+);
+
+CREATE TABLE IF NOT EXISTS wms_consumption_line (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  consumption_id BIGINT NOT NULL,
+  line_no INT,
+  item_code VARCHAR(64) NOT NULL,
+  qty DECIMAL(18,3) NOT NULL,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP
 );

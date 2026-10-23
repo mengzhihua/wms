@@ -14,6 +14,9 @@ const columns = [
   { prop: 'address', label: '地址', span: 24, minWidth: 200 },
   { prop: 'contact', label: '联系人' },
   { prop: 'phone', label: '电话' },
+  { prop: 'profile', label: '仓型', type: 'select', width: 110, default: 'GENERAL', options: [
+    { label: '一般仓', value: 'GENERAL' }, { label: '快消', value: 'FMCG' }, { label: '大件', value: 'BULKY' }, { label: 'VMI', value: 'VMI' }
+  ] },
   { prop: 'approvalRequired', label: '单据审核', type: 'bool', trueText: '需审核', falseText: '免审', default: false, width: 90 },
   statusCol
 ]
